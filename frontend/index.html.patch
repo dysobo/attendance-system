@@ -1,0 +1,18 @@
+<!-- 一键调休对话框 -->
+<el-dialog v-model="showQuickTimeoffDialog" title="🏖️ 一键调休" width="380px" :close-on-click-modal="false">
+    <el-form :model="quickTimeoffForm" label-width="70px">
+        <el-form-item label="日期">
+            <el-date-picker v-model="quickTimeoffForm.date" type="date" placeholder="选择日期" style="width:100%" value-format="YYYY-MM-DD"></el-date-picker>
+        </el-form-item>
+        <el-form-item label="时长">
+            <el-input-number v-model="quickTimeoffForm.hours" :min="0.5" :max="24" :step="0.5" style="width:100%"></el-input-number>
+        </el-form-item>
+        <el-form-item label="事由">
+            <el-input v-model="quickTimeoffForm.reason" type="textarea" :rows="2" placeholder="选填，如：去医院"></el-input>
+        </el-form-item>
+    </el-form>
+    <template #footer>
+        <el-button @click="showQuickTimeoffDialog=false">取消</el-button>
+        <el-button type="primary" @click="submitQuickTimeoff">提交申请</el-button>
+    </template>
+</el-dialog>

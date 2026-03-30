@@ -1,0 +1,396 @@
+# 考勤管理系统
+
+班组考勤管理工具，支持排班管理、调休申请、加班记录、消息推送等功能。
+
+---
+
+## 📋 项目信息
+
+- **项目名称**: 考勤管理系统 (Attendance Management System)
+- **版本**: v1.0.0
+- **开发时间**: 2026-03-30
+- **部署地址**: http://x.dysobo.cn:8888/kq
+- **服务器**: ECS 114.134.184.210:8888
+
+---
+
+## 🎯 功能特性
+
+### 1️⃣ 用户管理
+- ✅ 用户登录/登出
+- ✅ 记住登录状态
+- ✅ 修改密码
+- ✅ 角色权限（管理员/组员）
+- ✅ 管理员添加/删除用户
+- ✅ 管理员修改用户角色
+
+### 2️⃣ 排班管理（管理员专用）
+- ✅ 发布排班计划
+- ✅ 编辑排班信息
+- ✅ 删除排班记录
+- ✅ 同一人同一天只能有一个排班
+- ✅ 支持早班/晚班/休息
+
+### 3️⃣ 调休申请
+- ✅ 员工提交调休申请（按小时）
+- ✅ 最小单位 0.5 小时
+- ✅ 管理员审批（批准/拒绝）
+- ✅ 管理员编辑/删除申请
+- ✅ 权限隔离（组员只看自己的）
+
+### 4️⃣ 加班记录
+- ✅ 员工登记加班（按小时）
+- ✅ 最小单位 0.5 小时
+- ✅ 管理员确认/拒绝
+- ✅ 管理员编辑/删除记录
+- ✅ 权限隔离（组员只看自己的）
+
+### 5️⃣ 消息推送（Webhook）
+- ✅ 调休申请通知
+- ✅ 加班记录通知
+- ✅ 调休审批通知
+- ✅ 加班确认通知
+- ✅ 自定义推送地址和通道 ID
+- ✅ 测试推送功能
+
+### 6️⃣ 数据统计
+- ✅ 仪表盘统计（已批准调休、待审批调休、累计加班、待确认加班）
+- ✅ 近期排班（未来 30 天）
+- ✅ 个人统计汇总
+
+### 7️⃣ 移动端适配
+- ✅ 响应式布局
+- ✅ 侧滑菜单
+- ✅ 触摸优化
+- ✅ 表格横向滚动
+- ✅ 对话框适配
+
+---
+
+## 🏗️ 技术架构
+
+### 前端
+- **框架**: Vue 3 (全局构建版本)
+- **UI 库**: Element Plus
+- **样式**: 自定义 CSS + 渐变主题
+- **部署**: Nginx 静态文件托管
+
+### 后端
+- **框架**: FastAPI
+- **数据库**: SQLite
+- **ORM**: SQLAlchemy
+- **认证**: JWT Token
+- **密码加密**: SHA256
+- **部署**: systemd 服务 + uvicorn
+
+### 服务器
+- **系统**: Linux (PVE 虚拟机)
+- **Web 服务器**: Nginx (反向代理)
+- **进程管理**: systemd
+
+---
+
+## 📁 项目结构
+
+```
+attendance-system/
+├── backend/                    # 后端代码
+│   ├── main.py                # FastAPI 主程序
+│   ├── database.py            # 数据库模型
+│   ├── webhook.py             # Webhook 推送模块
+│   ├── attendance.db          # SQLite 数据库
+│   ├── webhook_config.json    # Webhook 配置
+│   └── requirements.txt       # Python 依赖
+├── frontend/                   # 前端代码
+│   ├── index.html             # 单页应用
+│   └── index-backup-*.html    # 备份文件
+├── deploy/                     # 部署脚本
+│   └── deploy.sh              # 一键部署脚本
+└── README.md                   # 项目说明
+```
+
+---
+
+## 🗄️ 数据库设计
+
+### 用户表 (users)
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER | 主键 |
+| name | VARCHAR(50) | 用户名（唯一） |
+| password | VARCHAR(100) | 密码（SHA256） |
+| role | VARCHAR(20) | 角色（admin/member） |
+| created_at | DATETIME | 创建时间 |
+
+### 排班表 (shifts)
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER | 主键 |
+| user_id | INTEGER | 用户 ID（外键） |
+| date | DATE | 排班日期 |
+| shift_type | VARCHAR(20) | 班次（早班/晚班/休息） |
+| note | VARCHAR(200) | 备注 |
+| created_at | DATETIME | 创建时间 |
+
+### 调休申请表 (time_off_requests)
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER | 主键 |
+| user_id | INTEGER | 用户 ID（外键） |
+| date | DATE | 调休日期 |
+| hours | FLOAT | 时长（小时） |
+| reason | TEXT | 事由 |
+| status | VARCHAR(20) | 状态（pending/approved/rejected） |
+| approved_by | INTEGER | 审批人 ID |
+| created_at | DATETIME | 申请时间 |
+| updated_at | DATETIME | 更新时间 |
+
+### 加班记录表 (overtime_records)
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER | 主键 |
+| user_id | INTEGER | 用户 ID（外键） |
+| date | DATE | 加班日期 |
+| hours | FLOAT | 时长（小时） |
+| reason | TEXT | 事由 |
+| status | VARCHAR(20) | 状态（pending/approved） |
+| approved_by | INTEGER | 确认人 ID |
+| created_at | DATETIME | 创建时间 |
+
+---
+
+## 🔌 API 接口
+
+### 认证接口
+| 接口 | 方法 | 说明 |
+|------|------|------|
+| `/api/login` | POST | 用户登录 |
+| `/api/users` | GET/POST | 用户列表/添加用户 |
+| `/api/users/{id}` | DELETE | 删除用户 |
+| `/api/users/{id}/role` | PUT | 修改用户角色 |
+| `/api/users/{id}/reset-password` | POST | 重置密码 |
+| `/api/auth/change-password` | POST | 修改密码 |
+
+### 排班接口
+| 接口 | 方法 | 说明 |
+|------|------|------|
+| `/api/shifts` | GET/POST | 排班列表/添加排班 |
+| `/api/shifts/{id}` | PUT/DELETE | 编辑/删除排班 |
+
+### 调休接口
+| 接口 | 方法 | 说明 |
+|------|------|------|
+| `/api/time-off` | GET/POST | 调休列表/申请调休 |
+| `/api/time-off/{id}` | PUT/DELETE | 编辑/删除调休 |
+| `/api/time-off/{id}/approve` | POST | 审批调休 |
+
+### 加班接口
+| 接口 | 方法 | 说明 |
+|------|------|------|
+| `/api/overtime` | GET/POST | 加班列表/登记加班 |
+| `/api/overtime/{id}` | PUT/DELETE | 编辑/删除加班 |
+| `/api/overtime/{id}/approve` | POST | 确认加班 |
+
+### 统计接口
+| 接口 | 方法 | 说明 |
+|------|------|------|
+| `/api/stats/my-summary` | GET | 个人统计汇总 |
+
+### Webhook 接口
+| 接口 | 方法 | 说明 |
+|------|------|------|
+| `/api/webhook/config` | GET/POST | 获取/保存配置 |
+| `/api/webhook/test` | POST | 测试推送 |
+
+---
+
+## 🚀 部署说明
+
+### 环境要求
+- Python 3.9+
+- Node.js 18+ (可选，仅开发)
+- Nginx
+- systemd
+
+### 部署步骤
+
+1. **上传项目到服务器**
+```bash
+scp -r attendance-system root@114.134.184.210:/root/
+```
+
+2. **安装 Python 依赖**
+```bash
+cd /root/attendance-system/backend
+pip3 install -r requirements.txt --break-system-packages
+```
+
+3. **配置 Nginx**
+```nginx
+server {
+    listen 8888;
+    server_name _;
+    
+    location /kq/ {
+        alias /root/attendance-system/frontend/;
+        index index.html;
+        try_files $uri $uri/ /kq/index.html;
+    }
+    
+    location /kq/api/ {
+        proxy_pass http://127.0.0.1:8000/api/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+```
+
+4. **创建 systemd 服务**
+```ini
+[Unit]
+Description=考勤管理系统后端服务
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/attendance-system/backend
+ExecStart=/usr/bin/python3 -m uvicorn main:app --host 127.0.0.1 --port 8000
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+5. **启动服务**
+```bash
+systemctl daemon-reload
+systemctl enable attendance.service
+systemctl start attendance.service
+systemctl restart nginx
+```
+
+---
+
+## 📱 使用指南
+
+### 管理员操作
+
+1. **登录**: 使用 admin 账号登录
+2. **排班管理**: 发布、编辑、删除排班
+3. **用户管理**: 添加/删除用户、修改角色、重置密码
+4. **审批调休**: 批准/拒绝员工的调休申请
+5. **确认加班**: 确认/拒绝员工的加班记录
+6. **编辑记录**: 编辑/删除调休和加班记录
+7. **消息推送**: 配置 Webhook 推送地址
+
+### 组员操作
+
+1. **登录**: 使用个人账号登录
+2. **查看排班**: 查看自己的排班
+3. **申请调休**: 提交调休申请（按小时）
+4. **登记加班**: 提交加班记录（按小时）
+5. **查看记录**: 查看自己的调休和加班记录
+6. **修改密码**: 修改个人密码
+
+---
+
+## 📊 后续规划
+
+### 1️⃣ 成员独立推送 📅
+- [ ] 为每个成员配置独立的推送通道
+- [ ] 审批结果推送给申请人
+- [ ] 排班变更推送给相关人员
+
+### 2️⃣ 月末汇总推送 📈
+- [ ] 每月最后一天自动汇总
+- [ ] 个人调休/加班统计
+- [ ] 班组整体统计
+- [ ] 推送给管理员和成员
+
+### 3️⃣ 班组汇总报表 📋
+- [ ] 月度报表（Excel/PDF）
+- [ ] 调休/加班统计图表
+- [ ] 出勤率分析
+- [ ] 导出功能
+
+### 4️⃣ 年度个人统计 📊
+- [ ] 年度调休/加班汇总
+- [ ] 个人考勤报告
+- [ ] 趋势分析图表
+- [ ] 可打印版本
+
+### 5️⃣ 待定功能 💡
+- [ ] 请假类型分类（病假/事假/年假）
+- [ ] 考勤规则配置（迟到/早退）
+- [ ] 打卡功能（可选）
+- [ ] 日历视图
+- [ ] 数据导入/导出
+- [ ] 多班组支持
+- [ ] 移动端 App（可选）
+
+---
+
+## 🔐 安全说明
+
+1. **密码安全**: 使用 SHA256 加密存储
+2. **Token 认证**: JWT Token 30 天有效期
+3. **权限隔离**: 组员只能查看自己的数据
+4. **操作确认**: 删除操作有确认对话框
+5. **HTTPS**: 建议生产环境启用 HTTPS
+
+---
+
+## 🛠️ 维护命令
+
+### 查看服务状态
+```bash
+ssh root@114.134.184.210 -p 443 "systemctl status attendance.service"
+```
+
+### 重启服务
+```bash
+ssh root@114.134.184.210 -p 443 "systemctl restart attendance.service"
+```
+
+### 查看日志
+```bash
+ssh root@114.134.184.210 -p 443 "journalctl -u attendance.service -f"
+```
+
+### 备份数据库
+```bash
+ssh root@114.134.184.210 -p 443 "cp /opt/attendance/backend/attendance.db /root/attendance-backup-$(date +%Y%m%d).db"
+```
+
+### 恢复数据库
+```bash
+ssh root@114.134.184.210 -p 443 "cp /root/attendance-backup-20260330.db /opt/attendance/backend/attendance.db && systemctl restart attendance.service"
+```
+
+---
+
+## 📞 技术支持
+
+- **服务器**: ECS 114.134.184.210
+- **部署路径**: /opt/attendance/
+- **前端路径**: /opt/attendance/frontend/
+- **后端路径**: /opt/attendance/backend/
+- **数据库**: /opt/attendance/backend/attendance.db
+
+---
+
+## 📝 更新日志
+
+### v1.0.0 (2026-03-30)
+- ✅ 初始版本发布
+- ✅ 用户管理、排班管理、调休申请、加班记录
+- ✅ 消息推送（Webhook）
+- ✅ 移动端适配
+- ✅ 编辑和删除功能
+- ✅ 近期排班（未来 30 天）
+
+---
+
+**最后更新**: 2026-03-30  
+**维护人员**: 波哥班组

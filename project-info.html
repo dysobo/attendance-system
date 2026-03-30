@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>考勤管理系统 - 项目说明</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); line-height: 1.6; color: #333; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .header { background: rgba(255,255,255,0.95); backdrop-filter: blur(10px); padding: 40px 30px; border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); margin-bottom: 30px; text-align: center; }
+        .header h1 { font-size: 32px; color: #667eea; margin-bottom: 10px; }
+        .header .subtitle { font-size: 16px; color: #666; margin-bottom: 20px; }
+        .header .info { display: flex; flex-wrap: wrap; gap: 15px; justify-content: center; }
+        .header .info-item { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; padding: 10px 20px; border-radius: 10px; font-size: 14px; }
+        .section { background: rgba(255,255,255,0.95); padding: 30px; border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .section h2 { font-size: 24px; color: #667eea; margin-bottom: 20px; border-bottom: 3px solid #667eea; padding-bottom: 10px; }
+        .section h3 { font-size: 18px; color: #333; margin: 20px 0 15px; }
+        .feature-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+        .feature-card { background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); padding: 20px; border-radius: 12px; }
+        .feature-card h4 { font-size: 16px; color: #667eea; margin-bottom: 10px; }
+        .feature-card ul { list-style: none; }
+        .feature-card li { padding: 5px 0; font-size: 14px; }
+        .feature-card li::before { content: "✅ "; }
+        table { width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 14px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #e0e0e0; }
+        th { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; font-weight: 600; }
+        tr:hover { background: #f5f7fa; }
+        .code-block { background: #f8f9fa; border-left: 4px solid #667eea; padding: 15px; margin: 15px 0; border-radius: 8px; overflow-x: auto; font-family: 'Courier New', monospace; font-size: 13px; }
+        .code-block code { color: #333; }
+        .tag { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; margin-right: 8px; }
+        .tag.blue { background: #e3f2fd; color: #1976d2; }
+        .tag.green { background: #e8f5e9; color: #388e3c; }
+        .tag.orange { background: #fff3e0; color: #f57c00; }
+        .roadmap { margin: 20px 0; }
+        .roadmap-item { display: flex; align-items: center; padding: 15px; background: #f8f9fa; border-radius: 10px; margin-bottom: 10px; }
+        .roadmap-item .priority { width: 80px; text-align: center; padding: 5px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; margin-right: 15px; }
+        .priority.high { background: #ffebee; color: #c62828; }
+        .priority.medium { background: #fff3e0; color: #ef6c00; }
+        .priority.low { background: #e8f5e9; color: #2e7d32; }
+        .roadmap-item .name { flex: 1; font-weight: 600; }
+        .roadmap-item .time { color: #666; font-size: 13px; }
+        @media (max-width: 768px) {
+            .header h1 { font-size: 24px; }
+            .section { padding: 20px; }
+            .section h2 { font-size: 20px; }
+            .feature-grid { grid-template-columns: 1fr; }
+            table { font-size: 12px; }
+            th, td { padding: 8px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 头部 -->
+        <div class="header">
+            <h1>📋 考勤管理系统</h1>
+            <div class="subtitle">班组考勤管理工具 - 排班 | 调休 | 加班 | 消息推送</div>
+            <div class="info">
+                <div class="info-item">🌐 http://x.dysobo.cn:8888/kq</div>
+                <div class="info-item">📅 v1.0.0</div>
+                <div class="info-item">🕒 2026-03-30</div>
+            </div>
+        </div>
+
+        <!-- 功能特性 -->
+        <div class="section">
+            <h2>🎯 功能特性</h2>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h4>👤 用户管理</h4>
+                    <ul>
+                        <li>用户登录/登出</li>
+                        <li>记住登录状态</li>
+                        <li>修改密码</li>
+                        <li>角色权限（管理员/组员）</li>
+                        <li>管理员添加/删除用户</li>
+                        <li>管理员修改用户角色</li>
+                    </ul>
+                </div>
+                <div class="feature-card">
+                    <h4>📅 排班管理</h4>
+                    <ul>
+                        <li>发布排班计划</li>
+                        <li>编辑排班信息</li>
+                        <li>删除排班记录</li>
+                        <li>同一人同一天一个排班</li>
+                        <li>早班/晚班/休息</li>
+                    </ul>
+                </div>
+                <div class="feature-card">
+                    <h4>🏖️ 调休申请</h4>
+                    <ul>
+                        <li>按小时申请（0.5 小时起）</li>
+                        <li>管理员审批</li>
+                        <li>管理员编辑/删除</li>
+                        <li>权限隔离</li>
+                    </ul>
+                </div>
+                <div class="feature-card">
+                    <h4>⏰ 加班记录</h4>
+                    <ul>
+                        <li>按小时登记（0.5 小时起）</li>
+                        <li>管理员确认</li>
+                        <li>管理员编辑/删除</li>
+                        <li>权限隔离</li>
+                    </ul>
+                </div>
+                <div class="feature-card">
+                    <h4>🔔 消息推送</h4>
+                    <ul>
+                        <li>调休申请通知</li>
+                        <li>加班记录通知</li>
+                        <li>调休审批通知</li>
+                        <li>加班确认通知</li>
+                        <li>自定义 Webhook</li>
+                    </ul>
+                </div>
+                <div class="feature-card">
+                    <h4>📊 数据统计</h4>
+                    <ul>
+                        <li>仪表盘统计</li>
+                        <li>近期排班（30 天）</li>
+                        <li>个人统计汇总</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- 技术架构 -->
+        <div class="section">
+            <h2>🏗️ 技术架构</h2>
+            <table>
+                <tr><th>层级</th><th>技术栈</th></tr>
+                <tr><td><span class="tag blue">前端</span></td><td>Vue 3 + Element Plus + 自定义 CSS</td></tr>
+                <tr><td><span class="tag green">后端</span></td><td>FastAPI + SQLite + SQLAlchemy</td></tr>
+                <tr><td><span class="tag orange">部署</span></td><td>Nginx + systemd + uvicorn</td></tr>
+                <tr><td><span class="tag blue">认证</span></td><td>JWT Token (30 天有效期)</td></tr>
+                <tr><td><span class="tag green">加密</span></td><td>SHA256 密码加密</td></tr>
+            </table>
+        </div>
+
+        <!-- 数据库设计 -->
+        <div class="section">
+            <h2>🗄️ 数据库设计</h2>
+            <h3>用户表 (users)</h3>
+            <table>
+                <tr><th>字段</th><th>类型</th><th>说明</th></tr>
+                <tr><td>id</td><td>INTEGER</td><td>主键</td></tr>
+                <tr><td>name</td><td>VARCHAR(50)</td><td>用户名（唯一）</td></tr>
+                <tr><td>password</td><td>VARCHAR(100)</td><td>密码（SHA256）</td></tr>
+                <tr><td>role</td><td>VARCHAR(20)</td><td>角色（admin/member）</td></tr>
+                <tr><td>created_at</td><td>DATETIME</td><td>创建时间</td></tr>
+            </table>
+
+            <h3>排班表 (shifts)</h3>
+            <table>
+                <tr><th>字段</th><th>类型</th><th>说明</th></tr>
+                <tr><td>id</td><td>INTEGER</td><td>主键</td></tr>
+                <tr><td>user_id</td><td>INTEGER</td><td>用户 ID（外键）</td></tr>
+                <tr><td>date</td><td>DATE</td><td>排班日期</td></tr>
+                <tr><td>shift_type</td><td>VARCHAR(20)</td><td>班次（早班/晚班/休息）</td></tr>
+                <tr><td>note</td><td>VARCHAR(200)</td><td>备注</td></tr>
+            </table>
+
+            <h3>调休申请表 (time_off_requests)</h3>
+            <table>
+                <tr><th>字段</th><th>类型</th><th>说明</th></tr>
+                <tr><td>id</td><td>INTEGER</td><td>主键</td></tr>
+                <tr><td>user_id</td><td>INTEGER</td><td>用户 ID（外键）</td></tr>
+                <tr><td>date</td><td>DATE</td><td>调休日期</td></tr>
+                <tr><td>hours</td><td>FLOAT</td><td>时长（小时）</td></tr>
+                <tr><td>reason</td><td>TEXT</td><td>事由</td></tr>
+                <tr><td>status</td><td>VARCHAR(20)</td><td>pending/approved/rejected</td></tr>
+            </table>
+
+            <h3>加班记录表 (overtime_records)</h3>
+            <table>
+                <tr><th>字段</th><th>类型</th><th>说明</th></tr>
+                <tr><td>id</td><td>INTEGER</td><td>主键</td></tr>
+                <tr><td>user_id</td><td>INTEGER</td><td>用户 ID（外键）</td></tr>
+                <tr><td>date</td><td>DATE</td><td>加班日期</td></tr>
+                <tr><td>hours</td><td>FLOAT</td><td>时长（小时）</td></tr>
+                <tr><td>reason</td><td>TEXT</td><td>事由</td></tr>
+                <tr><td>status</td><td>VARCHAR(20)</td><td>pending/approved</td></tr>
+            </table>
+        </div>
+
+        <!-- API 接口 -->
+        <div class="section">
+            <h2>🔌 API 接口</h2>
+            <h3>认证接口</h3>
+            <table>
+                <tr><th>接口</th><th>方法</th><th>说明</th></tr>
+                <tr><td>/api/login</td><td>POST</td><td>用户登录</td></tr>
+                <tr><td>/api/users</td><td>GET/POST</td><td>用户列表/添加用户</td></tr>
+                <tr><td>/api/users/{id}</td><td>DELETE</td><td>删除用户</td></tr>
+                <tr><td>/api/users/{id}/role</td><td>PUT</td><td>修改用户角色</td></tr>
+                <tr><td>/api/auth/change-password</td><td>POST</td><td>修改密码</td></tr>
+            </table>
+
+            <h3>排班接口</h3>
+            <table>
+                <tr><th>接口</th><th>方法</th><th>说明</th></tr>
+                <tr><td>/api/shifts</td><td>GET/POST</td><td>排班列表/添加排班</td></tr>
+                <tr><td>/api/shifts/{id}</td><td>PUT/DELETE</td><td>编辑/删除排班</td></tr>
+            </table>
+
+            <h3>调休接口</h3>
+            <table>
+                <tr><th>接口</th><th>方法</th><th>说明</th></tr>
+                <tr><td>/api/time-off</td><td>GET/POST</td><td>调休列表/申请调休</td></tr>
+                <tr><td>/api/time-off/{id}</td><td>PUT/DELETE</td><td>编辑/删除调休</td></tr>
+                <tr><td>/api/time-off/{id}/approve</td><td>POST</td><td>审批调休</td></tr>
+            </table>
+
+            <h3>加班接口</h3>
+            <table>
+                <tr><th>接口</th><th>方法</th><th>说明</th></tr>
+                <tr><td>/api/overtime</td><td>GET/POST</td><td>加班列表/登记加班</td></tr>
+                <tr><td>/api/overtime/{id}</td><td>PUT/DELETE</td><td>编辑/删除加班</td></tr>
+                <tr><td>/api/overtime/{id}/approve</td><td>POST</td><td>确认加班</td></tr>
+            </table>
+        </div>
+
+        <!-- 后续规划 -->
+        <div class="section">
+            <h2>📊 后续规划</h2>
+            <div class="roadmap">
+                <div class="roadmap-item">
+                    <div class="priority high">🔴 高</div>
+                    <div class="name">📅 成员独立推送 - 为每个成员配置独立的推送通道，审批结果推送给申请人</div>
+                    <div class="time">⏱️ 2 小时</div>
+                </div>
+                <div class="roadmap-item">
+                    <div class="priority medium">🟡 中</div>
+                    <div class="name">📈 月末汇总推送 - 每月最后一天自动汇总，个人调休/加班统计，班组整体统计</div>
+                    <div class="time">⏱️ 4 小时</div>
+                </div>
+                <div class="roadmap-item">
+                    <div class="priority medium">🟡 中</div>
+                    <div class="name">📋 班组汇总报表 - 月度报表（Excel/PDF），调休/加班统计图表，出勤率分析</div>
+                    <div class="time">⏱️ 6 小时</div>
+                </div>
+                <div class="roadmap-item">
+                    <div class="priority low">🟢 低</div>
+                    <div class="name">📊 年度个人统计 - 年度调休/加班汇总，个人考勤报告，趋势分析图表</div>
+                    <div class="time">⏱️ 4 小时</div>
+                </div>
+                <div class="roadmap-item">
+                    <div class="priority low">🟢 低</div>
+                    <div class="name">💡 待定功能 - 请假类型分类、考勤规则、打卡功能、日历视图等</div>
+                    <div class="time">⏱️ 待定</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 维护命令 -->
+        <div class="section">
+            <h2>🛠️ 维护命令</h2>
+            <div class="code-block">
+                <code># 查看服务状态<br>ssh root@xxx.xxx.xxx.xxx -p 443 "systemctl status attendance.service"<br><br># 重启服务<br>ssh root@xxx.xxx.xxx.xxx -p 443 "systemctl restart attendance.service"<br><br># 查看日志<br>ssh root@xxx.xxx.xxx.xxx -p 443 "journalctl -u attendance.service -f"<br><br># 备份数据库<br>ssh root@xxx.xxx.xxx.xxx -p 443 "cp /opt/attendance/backend/attendance.db /root/attendance-backup-$(date +%Y%m%d).db"</code>
+            </div>
+        </div>
+
+        <!-- 页脚 -->
+        <div class="section" style="text-align: center;">
+            <p style="color: #666; font-size: 14px;">最后更新：2026-03-30 | 维护人员：波仔和他的小龙虾</p>
+            <p style="color: #999; font-size: 12px; margin-top: 10px;">访问地址：http://x.dysobo.cn:8888/kq</p>
+        </div>
+    </div>
+</body>
+</html>

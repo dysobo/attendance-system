@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>考勤管理系统</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/element-plus"></script>
+    <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
+        
+        /* 登录页 */
+        .login-wrapper { display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
+        .login-card { background: rgba(255,255,255,0.95); backdrop-filter: blur(10px); padding: 30px 24px; border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); width: 100%; max-width: 380px; }
+        .login-header { text-align: center; margin-bottom: 25px; }
+        .login-icon { font-size: 56px; display: block; margin-bottom: 12px; }
+        .login-title { font-size: 22px; font-weight: 700; color: #333; }
+        
+        /* 主界面 */
+        .main-wrapper { display: flex; min-height: 100vh; background: #f0f2f5; }
+        .sidebar { width: 220px; background: linear-gradient(180deg, #1e3c72 0%, #2a5298 100%); color: #fff; position: fixed; height: 100vh; overflow-y: auto; z-index: 1002; transition: transform 0.3s ease; }
+        .sidebar-header { padding: 20px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.1); font-size: 18px; font-weight: 700; }
+        .menu-item { padding: 14px 18px; cursor: pointer; transition: all 0.3s; display: flex; align-items: center; gap: 10px; font-size: 14px; color: rgba(255,255,255,0.8); }
+        .menu-item:hover { background: rgba(255,255,255,0.1); color: #fff; }
+        .menu-item.active { background: rgba(255,255,255,0.2); color: #fff; border-left: 3px solid #409EFF; }
+        .main-content { margin-left: 220px; flex: 1; padding: 16px; transition: margin-left 0.3s ease; width: 100%; max-width: 100%; }
+        
+        /* 头部卡片 */
+        .header-card { background: #fff; padding: 16px; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+        .page-title { font-size: 18px; font-weight: 700; color: #333; }
+        
+        /* 内容卡片 */
+        .content-card { background: #fff; padding: 16px; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); width: 100%; max-width: 100%; overflow-x: hidden; }
+        
+        /* 统计卡片 */
+        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+        .stat-card { padding: 16px 12px; border-radius: 12px; color: #fff; }
+        .stat-card.blue { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .stat-card.pink { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+        .stat-card.cyan { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
+        .stat-card.green { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); }
+        .stat-label { font-size: 12px; opacity: 0.9; margin-bottom: 6px; }
+        .stat-number { font-size: 24px; font-weight: 700; }
+        
+        /* 表格 */
+        .table-wrapper { overflow-x: auto; border-radius: 8px; }
+        .section-title { font-size: 16px; font-weight: 700; margin: 16px 0 12px; }
+        
+        /* 移动端优化 */
+        .mobile-menu-btn { display: none; position: fixed; top: 12px; left: 12px; z-index: 1003; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; border: none; padding: 10px 14px; border-radius: 10px; font-size: 18px; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+        .overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1001; }
+        
+        /* Element Plus 优化 */
+        .el-dialog { max-width: 380px !important; margin: 0 auto !important; }
+        .el-input, .el-select, .el-date-picker { max-width: 100% !important; }
+        
+        /* 手机端适配 */
+        @media (max-width: 768px) {
+            .sidebar { transform: translateX(-100%); }
+            .sidebar.open { transform: translateX(0); }
+            .main-content { margin-left: 0 !important; padding: 12px !important; padding-top: 50px !important; }
+            .mobile-menu-btn { display: block; }
+            .overlay.show { display: block; }
+            .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+            .stat-card { padding: 14px 10px; }
+            .stat-number { font-size: 20px; }
+            .header-card { flex-direction: column; align-items: flex-start; }
+            .table-wrapper { overflow-x: auto !important; }
+        }
+        
+        /* 小屏幕手机 */
+        @media (max-width: 375px) {
+            .stats-grid { grid-template-columns: 1fr; }
+            .stat-number { font-size: 18px; }
+        }
+        
+        /* 版本号 */
+        .version-tag {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.6);
+            color: #fff;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            z-index: 9999;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <!-- 移动端菜单按钮 -->
+        <button class="mobile-menu-btn" @click="menuOpen=!menuOpen">☰</button>
+        <div class="overlay" :class="{show: menuOpen}" @click="menuOpen=false"></div>
+        
+        <!-- 登录页 -->
+        <div v-if="!currentUser" class="login-wrapper">
+            <div class="login-card">
+                <div class="login-header">
+                    <span class="login-icon">📋</span>
+                    <h1 class="login-title">考勤管理系统</h1>
+                </div>
+                <el-input v-model="loginForm.name" placeholder="用户名" style="margin-bottom:15px"></el-input>
+                <el-input v-model="loginForm.password" type="password" placeholder="密码" @keyup.enter="handleLogin" style="margin-bottom:20px"></el-input>
+                <el-button type="primary" style="width:100%" @click="handleLogin">登 录</el-button>
+            </div>
+        </div>
+        
+        <!-- 主界面 -->
+        <div v-else class="main-wrapper">
+            <!-- 侧边栏 -->
+            <div class="sidebar" :class="{open: menuOpen}">
+                <div class="sidebar-header">📊 考勤管理</div>
+                <div class="menu-item" :class="{active: currentPage==='dashboard'}" @click="currentPage='dashboard';menuOpen=false">📊 仪表盘</div>
+                <div class="menu-item" :class="{active: currentPage==='shifts'}" @click="currentPage='shifts';menuOpen=false">📅 排班管理</div>
+                <div class="menu-item" :class="{active: currentPage==='timeoff'}" @click="currentPage='timeoff';menuOpen=false">🏖️ 调休申请</div>
+                <div class="menu-item" :class="{active: currentPage==='overtime'}" @click="currentPage='overtime';menuOpen=false">⏰ 加班记录</div>
+                <div class="menu-item" v-if="currentUser.role==='admin'" :class="{active: currentPage==='users'}" @click="currentPage='users';menuOpen=false">👥 用户管理</div>
+                <div class="menu-item" v-if="currentUser.role==='admin'" :class="{active: currentPage==='webhook'}" @click="currentPage='webhook';menuOpen=false">🔔 消息推送</div>
+                <div class="menu-item" :class="{active: currentPage==='password'}" @click="currentPage='password';menuOpen=false">🔑 修改密码</div>
+                <div class="menu-item" @click="handleLogout" style="margin-top:auto;border-top:1px solid rgba(255,255,255,0.1)">🚪 退出登录</div>
+            </div>
+            
+            <!-- 主内容区 -->
+            <div class="main-content">
+                <div class="header-card">
+                    <h1 class="page-title">{{ pageTitle }}</h1>
+                    <el-tag :type="currentUser.role==='admin'?'danger':'primary'" size="small" effect="dark">{{ currentUser.role==='admin'?'管理员':'组员' }}</el-tag><span style="margin-left:8px;color:#666;font-size:13px">{{ currentUser.name }}</span>
+                </div>
+                
+                <div class="content-card">
+                    <!-- 仪表盘 -->
+                    <div v-show="currentPage === 'dashboard'">
+                        <div class="stats-grid">
+                            <div class="stat-card blue"><div class="stat-label">已批准调休</div><div class="stat-number">{{ myStats.time_off_approved||0 }}天</div></div>
+                            <div class="stat-card pink"><div class="stat-label">待审批调休</div><div class="stat-number">{{ myStats.time_off_pending||0 }}天</div></div>
+                            <div class="stat-card cyan"><div class="stat-label">累计加班</div><div class="stat-number">{{ myStats.overtime_hours||0 }}小时</div></div>
+                            <div class="stat-card green"><div class="stat-label">待确认加班</div><div class="stat-number">{{ myStats.overtime_pending||0 }}条</div></div>
+                        </div>
+                        <h2 class="section-title">📅 近期排班（未来 30 天）</h2>
+                        <div class="table-wrapper">
+                            <el-table :data="recentShifts" stripe>
+                                <el-table-column prop="date" label="日期" width="100"></el-table-column>
+                                <el-table-column prop="user_name" label="姓名" width="80"></el-table-column>
+                                <el-table-column prop="shift_type" label="班次" width="80"></el-table-column>
+                                <el-table-column prop="note" label="备注"></el-table-column>
+                            </el-table>
+                        </div>
+                        <div v-if="recentShifts.length===0" style="text-align:center;padding:40px;color:#999">
+                            <div style="font-size:48px;margin-bottom:10px">📭</div>
+                            <div>近期暂无排班记录</div>
+                        </div>
+                    </div>
+                    
+                    <!-- 排班管理 -->
+                    <div v-show="currentPage === 'shifts'">
+                        <!-- 管理员视图 -->
+                        <div v-if="currentUser.role==='admin'">
+                            <el-button type="primary" @click="openShiftDialog(false)">➕ 添加排班</el-button>
+                            <div class="table-wrapper" style="margin-top:15px">
+                                <el-table :data="shifts" stripe>
+                                    <el-table-column prop="date" label="日期" width="100"></el-table-column>
+                                    <el-table-column prop="user_name" label="姓名" width="80"></el-table-column>
+                                    <el-table-column prop="shift_type" label="班次" width="80">
+                                        <template #default="scope">
+                                            <el-tag :type="scope.row.shift_type==='早班'?'success':scope.row.shift_type==='晚班'?'warning':'info'" size="small">{{ scope.row.shift_type }}</el-tag>
+                                        </template>
+                                    </el-table-column>
+                                    <el-table-column prop="note" label="备注"></el-table-column>
+                                    <el-table-column label="操作" width="180">
+                                        <template #default="scope">
+                                            <el-button size="small" @click="openShiftDialog(true, scope.row)">编辑</el-button>
+                                            <el-button size="small" type="danger" @click="confirmDeleteShift(scope.row.id)">删除</el-button>
+                                        </template>
+                                    </el-table-column>
+                                </el-table>
+                            </div>
+                            <div v-if="shifts.length===0" style="text-align:center;padding:40px;color:#999">
+                                <div style="font-size:48px;margin-bottom:10px">📭</div>
+                                <div>暂无排班记录</div>
+                            </div>
+                        </div>
+                        
+                        <!-- 组员视图 -->
+                        <div v-else>
+                            <div style="background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);color:#fff;padding:20px;border-radius:12px;margin-bottom:20px">
+                                <h3 style="margin-bottom:10px">📅 我的排班</h3>
+                                <p style="font-size:13px;opacity:0.9">显示范围：近 3 个月 + 后 1 个月</p>
+                            </div>
+                            <div class="table-wrapper">
+                                <el-table :data="myShifts" stripe>
+                                    <el-table-column prop="date" label="日期" width="100"></el-table-column>
+                                    <el-table-column prop="shift_type" label="班次" width="80">
+                                        <template #default="scope">
+                                            <el-tag :type="scope.row.shift_type==='早班'?'success':scope.row.shift_type==='晚班'?'warning':'info'" size="small">{{ scope.row.shift_type }}</el-tag>
+                                        </template>
+                                    </el-table-column>
+                                    <el-table-column prop="note" label="备注"></el-table-column>
+                                </el-table>
+                            </div>
+                            <div v-if="myShifts.length===0" style="text-align:center;padding:60px 20px;color:#999">
+                                <div style="font-size:64px;margin-bottom:15px">📭</div>
+                                <div style="font-size:16px;font-weight:600;margin-bottom:10px">近期没有排班</div>
+                                <div style="font-size:13px">请联系管理员安排排班</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 调休申请 -->
+                    <div v-show="currentPage === 'timeoff'">
+                        <el-button type="primary" @click="showTimeoffDialog=true">➕ 申请调休</el-button>
+                        <div class="table-wrapper" style="margin-top:15px">
+                            <el-table :data="timeoffList" stripe>
+                                <el-table-column prop="date" label="日期" width="100"></el-table-column>
+                                <el-table-column prop="hours" label="时长" width="60"></el-table-column>
+                                <el-table-column prop="user_name" label="申请人" width="80"></el-table-column>
+                                <el-table-column prop="reason" label="事由"></el-table-column>
+                                <el-table-column prop="status" label="状态" width="80">
+                                    <template #default="scope">
+                                        <el-tag :type="scope.row.status==='approved'?'success':scope.row.status==='rejected'?'danger':'warning'" size="small">{{ scope.row.status==='approved'?'已批准':scope.row.status==='rejected'?'已拒绝':'待审批' }}</el-tag>
+                                    </template>
+                                </el-table-column>
+                                <el-table-column label="操作" width="220" v-if="currentUser.role==='admin'">
+                                    <template #default="scope">
+                                        <el-button v-if="scope.row.status==='pending'" size="small" type="success" @click="approveTimeoff(scope.row.id,true)">批准</el-button>
+                                        <el-button v-if="scope.row.status==='pending'" size="small" type="danger" @click="approveTimeoff(scope.row.id,false)">拒绝</el-button>
+                                        <el-button size="small" @click="openEditTimeoff(scope.row)">编辑</el-button>
+                                        <el-button size="small" type="danger" @click="confirmDeleteTimeoff(scope.row.id)">删除</el-button>
+                                    </template>
+                                </el-table-column>
+                            </el-table>
+                        </div>
+                    </div>
+                    
+                    <!-- 加班记录 -->
+                    <div v-show="currentPage === 'overtime'">
+                        <el-button type="primary" @click="showOvertimeDialog=true">➕ 登记加班</el-button>
+                        <div class="table-wrapper" style="margin-top:15px">
+                            <el-table :data="overtimeList" stripe>
+                                <el-table-column prop="date" label="日期" width="100"></el-table-column>
+                                <el-table-column prop="hours" label="时长" width="60"></el-table-column>
+                                <el-table-column prop="user_name" label="申请人" width="80"></el-table-column>
+                                <el-table-column prop="reason" label="事由"></el-table-column>
+                                <el-table-column prop="status" label="状态" width="80">
+                                    <template #default="scope">
+                                        <el-tag :type="scope.row.status==='approved'?'success':'warning'" size="small">{{ scope.row.status==='approved'?'已确认':'待确认' }}</el-tag>
+                                    </template>
+                                </el-table-column>
+                                <el-table-column label="操作" width="220" v-if="currentUser.role==='admin'">
+                                    <template #default="scope">
+                                        <el-button v-if="scope.row.status==='pending'" size="small" type="success" @click="approveOvertime(scope.row.id,true)">确认</el-button>
+                                        <el-button v-if="scope.row.status==='pending'" size="small" type="danger" @click="approveOvertime(scope.row.id,false)">拒绝</el-button>
+                                        <el-button size="small" @click="openEditOvertime(scope.row)">编辑</el-button>
+                                        <el-button size="small" type="danger" @click="confirmDeleteOvertime(scope.row.id)">删除</el-button>
+                                    </template>
+                                </el-table-column>
+                            </el-table>
+                        </div>
+                    </div>
+                    
+                    <!-- 用户管理 -->
+                    <div v-show="currentPage === 'users' && currentUser.role==='admin'">
+                        <el-button type="primary" @click="showUserDialog=true">➕ 添加用户</el-button>
+                        <div class="table-wrapper" style="margin-top:15px">
+                            <el-table :data="users" stripe>
+                                <el-table-column prop="name" label="用户名"></el-table-column>
+                                <el-table-column prop="role" label="角色" width="100">
+                                    <template #default="scope">
+                                        <el-tag :type="scope.row.role==='admin'?'danger':'primary'" size="small">{{ scope.row.role==='admin'?'管理员':'组员' }}</el-tag>
+                                    </template>
+                                </el-table-column>
+                                <el-table-column label="操作" width="220">
+                                    <template #default="scope">
+                                        <el-button size="small" @click="openResetPassword(scope.row)">重置密码</el-button>
+                                        <el-button size="small" :type="scope.row.role==='admin'?'warning':'success'" @click="toggleUserRole(scope.row)">{{scope.row.role==='admin'?'取消管理':'设为管理'}}</el-button>
+                                        <el-button size="small" type="danger" v-if="scope.row.id!==currentUser.id" @click="confirmDeleteUser(scope.row.id)">删除</el-button>
+                                    </template>
+                                </el-table-column>
+                            </el-table>
+                        </div>
+                    </div>
+                    
+                    <!-- 消息推送 -->
+                    <div v-show="currentPage === 'webhook' && currentUser.role==='admin'">
+                        <el-form :model="webhookForm" label-width="100px" style="max-width:600px">
+                            <el-form-item label="启用推送"><el-switch v-model="webhookForm.enabled"></el-switch></el-form-item>
+                            <el-form-item label="推送地址"><el-input v-model="webhookForm.url" placeholder="https://nh.dysobo.cn:888/api/service/notify"></el-input></el-form-item>
+                            <el-form-item label="通道 ID"><el-input v-model="webhookForm.route_id" placeholder="route_skuo"></el-input></el-form-item>
+                            <el-form-item label="通知类型">
+                                <div style="display:flex;flex-direction:column;gap:10px">
+                                    <el-checkbox v-model="webhookForm.notify_time_off">调休申请</el-checkbox>
+                                    <el-checkbox v-model="webhookForm.notify_overtime">加班记录</el-checkbox>
+                                </div>
+                            </el-form-item>
+                            <el-form-item>
+                                <el-button type="primary" @click="saveWebhookConfig">保存配置</el-button>
+                                <el-button @click="testWebhook">测试推送</el-button>
+                            </el-form-item>
+                        </el-form>
+                    </div>
+                    
+                    <!-- 修改密码 -->
+                    <div v-show="currentPage === 'password'">
+                        <el-form :model="passwordForm" label-width="80px" style="max-width:400px">
+                            <el-form-item label="当前密码"><el-input v-model="passwordForm.oldPassword" type="password"></el-input></el-form-item>
+                            <el-form-item label="新密码"><el-input v-model="passwordForm.newPassword" type="password"></el-input></el-form-item>
+                            <el-form-item label="确认密码"><el-input v-model="passwordForm.confirmPassword" type="password"></el-input></el-form-item>
+                            <el-form-item><el-button type="primary" @click="changePassword">修改密码</el-button></el-form-item>
+                        </el-form>
+                    </div>
+                    
+                    <!-- 排班对话框 -->
+                    <el-dialog v-model="showShiftDialog" :title="editingShiftId?'编辑排班':'添加排班'" width="380px">
+                        <el-form :model="shiftForm" label-width="70px">
+                            <el-form-item label="人员">
+                                <el-select v-model="shiftForm.user_id" placeholder="选择人员" style="width:100%" :disabled="!!editingShiftId">
+                                    <el-option v-for="u in users" :key="u.id" :label="u.name" :value="u.id"></el-option>
+                                </el-select>
+                            </el-form-item>
+                            <el-form-item label="日期">
+                                <el-date-picker v-model="shiftForm.date" type="date" placeholder="选择日期" style="width:100%" value-format="YYYY-MM-DD" :disabled="!!editingShiftId"></el-date-picker>
+                            </el-form-item>
+                            <el-form-item label="班次">
+                                <el-select v-model="shiftForm.shift_type" placeholder="选择班次" style="width:100%">
+                                    <el-option label="早班" value="早班"></el-option>
+                                    <el-option label="晚班" value="晚班"></el-option>
+                                    <el-option label="休息" value="休息"></el-option>
+                                </el-select>
+                            </el-form-item>
+                            <el-form-item label="备注">
+                                <el-input v-model="shiftForm.note" type="textarea" :rows="2"></el-input>
+                            </el-form-item>
+                        </el-form>
+                        <template #footer>
+                            <el-button @click="showShiftDialog=false">取消</el-button>
+                            <el-button type="primary" @click="saveShift">确定</el-button>
+                        </template>
+                    </el-dialog>
+                    
+                    <!-- 调休对话框 -->
+                    <el-dialog v-model="showTimeoffDialog" :title="editingTimeoffId?'编辑调休申请':'申请调休'" width="380px">
+                        <el-form :model="timeoffForm" label-width="70px">
+                            <el-form-item label="日期">
+                                <el-date-picker v-model="timeoffForm.date" type="date" placeholder="选择日期" style="width:100%" value-format="YYYY-MM-DD"></el-date-picker>
+                            </el-form-item>
+                            <el-form-item label="时长">
+                                <el-input-number v-model="timeoffForm.hours" :min="0.5" :max="24" :step="0.5" style="width:100%"></el-input-number>
+                            </el-form-item>
+                            <el-form-item label="事由">
+                                <el-input v-model="timeoffForm.reason" type="textarea" :rows="2"></el-input>
+                            </el-form-item>
+                        </el-form>
+                        <template #footer>
+                            <el-button @click="showTimeoffDialog=false">取消</el-button>
+                            <el-button type="primary" @click="saveTimeoff">确定</el-button>
+                        </template>
+                    </el-dialog>
+                    
+                    <!-- 加班对话框 -->
+                    <el-dialog v-model="showOvertimeDialog" :title="editingOvertimeId?'编辑加班记录':'登记加班'" width="380px">
+                        <el-form :model="overtimeForm" label-width="70px">
+                            <el-form-item label="日期">
+                                <el-date-picker v-model="overtimeForm.date" type="date" placeholder="选择日期" style="width:100%" value-format="YYYY-MM-DD"></el-date-picker>
+                            </el-form-item>
+                            <el-form-item label="时长">
+                                <el-input-number v-model="overtimeForm.hours" :min="0.5" :max="24" :step="0.5" style="width:100%"></el-input-number>
+                            </el-form-item>
+                            <el-form-item label="事由">
+                                <el-input v-model="overtimeForm.reason" type="textarea" :rows="2"></el-input>
+                            </el-form-item>
+                        </el-form>
+                        <template #footer>
+                            <el-button @click="showOvertimeDialog=false">取消</el-button>
+                            <el-button type="primary" @click="saveOvertime">确定</el-button>
+                        </template>
+                    </el-dialog>
+                    
+                    <!-- 用户对话框 -->
+                    <el-dialog v-model="showUserDialog" title="添加用户" width="380px">
+                        <el-form :model="userForm" label-width="70px">
+                            <el-form-item label="用户名">
+                                <el-input v-model="userForm.name" placeholder="请输入用户名"></el-input>
+                            </el-form-item>
+                            <el-form-item label="密码">
+                                <el-input v-model="userForm.password" type="password" placeholder="请输入密码"></el-input>
+                            </el-form-item>
+                            <el-form-item label="角色">
+                                <el-select v-model="userForm.role" style="width:100%">
+                                    <el-option label="组员" value="member"></el-option>
+                                    <el-option label="管理员" value="admin"></el-option>
+                                </el-select>
+                            </el-form-item>
+                        </el-form>
+                        <template #footer>
+                            <el-button @click="showUserDialog=false">取消</el-button>
+                            <el-button type="primary" @click="saveUser">确定</el-button>
+                        </template>
+                    </el-dialog>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 版本号 -->
+    <div class="version-tag">V1.3</div>
+    
+    <script>
+        const API_BASE = '/kq/api';
+        const { createApp, ref, computed, onMounted } = Vue;
+        
+        createApp({
+            setup() {
+                const currentUser = ref(null);
+                const currentPage = ref('dashboard');
+                const menuOpen = ref(false);
+                const loginForm = ref({ name: '', password: '' });
+                const users = ref([]);
+                const shifts = ref([]);
+                const timeoffList = ref([]);
+                const overtimeList = ref([]);
+                const myStats = ref({});
+                const webhookForm = ref({ enabled: false, url: '', route_id: '', notify_time_off: true, notify_overtime: true });
+                const passwordForm = ref({ oldPassword: '', newPassword: '', confirmPassword: '' });
+                const showShiftDialog = ref(false);
+                const showTimeoffDialog = ref(false);
+                const showOvertimeDialog = ref(false);
+                const showUserDialog = ref(false);
+                const shiftForm = ref({ user_id: null, date: '', shift_type: '', note: '' });
+                const timeoffForm = ref({ date: '', hours: 4, reason: '' });
+                const overtimeForm = ref({ date: '', hours: 1, reason: '' });
+                const userForm = ref({ name: '', password: '', role: 'member' });
+                const editingShiftId = ref(null);
+                const editingTimeoffId = ref(null);
+                const editingOvertimeId = ref(null);
+                
+                const pageTitle = computed(() => ({ dashboard:'📊 仪表盘', shifts:'📅 排班管理', timeoff:'🏖️ 调休申请', overtime:'⏰ 加班记录', users:'👥 用户管理', webhook:'🔔 消息推送', password:'🔑 修改密码' })[currentPage.value] || '考勤管理');
+                
+                const recentShifts = computed(() => {
+                    const today = new Date();
+                    const future30Days = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
+                    return shifts.value.filter(s => { const d = new Date(s.date); return d >= today && d <= future30Days; }).sort((a, b) => new Date(a.date) - new Date(b.date));
+                });
+                
+                const myShifts = computed(() => {
+                    if (!currentUser.value) return [];
+                    const today = new Date();
+                    const past3Months = new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000);
+                    const future1Month = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
+                    const myId = Number(currentUser.value.id);
+                    return shifts.value.filter(s => {
+                        const d = new Date(s.date);
+                        return d >= past3Months && d <= future1Month && Number(s.user_id) === myId;
+                    }).sort((a, b) => new Date(a.date) - new Date(b.date));
+                });
+                
+                const api = async (endpoint, options = {}) => {
+                    const token = localStorage.getItem('token');
+                    const headers = { 'Content-Type': 'application/json' };
+                    if (token) headers['Authorization'] = 'Bearer ' + token;
+                    const res = await fetch(API_BASE + endpoint, { ...options, headers });
+                    const data = await res.json();
+                    if (res.status === 401) { localStorage.removeItem('token'); currentUser.value = null; }
+                    if (!res.ok) throw new Error(data.detail || '请求失败');
+                    return data;
+                };
+                
+                const handleLogin = async () => {
+                    const data = await api('/login', { method: 'POST', body: JSON.stringify(loginForm.value) });
+                    localStorage.setItem('token', data.token);
+                    currentUser.value = data.user;
+                    await loadData();
+                };
+                
+                const handleLogout = () => { localStorage.removeItem('token'); currentUser.value = null; };
+                
+                const loadData = async () => {
+                    const stats = await api('/stats/my-summary');
+                    const u = await api('/users');
+                    myStats.value = stats;
+                    users.value = u;
+                    if (currentUser.value.role === 'admin') {
+                        const [s, t, o] = await Promise.all([api('/shifts'), api('/time-off'), api('/overtime')]);
+                        shifts.value = s; timeoffList.value = t; overtimeList.value = o;
+                    } else {
+                        const uid = currentUser.value.id;
+                        const [s, t, o] = await Promise.all([api('/shifts?user_id='+uid), api('/time-off?user_id='+uid), api('/overtime?user_id='+uid)]);
+                        shifts.value = s; timeoffList.value = t; overtimeList.value = o;
+                    }
+                };
+                
+                const approveTimeoff = async (id, ok) => { await api('/time-off/'+id+'/approve', { method: 'POST', body: JSON.stringify({ approved: ok }) }); await loadData(); };
+                const approveOvertime = async (id, ok) => { await api('/overtime/'+id+'/approve', { method: 'POST', body: JSON.stringify({ approved: ok }) }); await loadData(); };
+                
+                const saveTimeoff = async () => {
+                    const d = timeoffForm.value.date.split('T')[0];
+                    if(editingTimeoffId.value) {
+                        await api('/time-off/'+editingTimeoffId.value, { method: 'PUT', body: JSON.stringify({ date: d, hours: timeoffForm.value.hours, reason: timeoffForm.value.reason }) });
+                    } else {
+                        await api('/time-off', { method: 'POST', body: JSON.stringify({ date: d, hours: timeoffForm.value.hours, reason: timeoffForm.value.reason }) });
+                    }
+                    showTimeoffDialog.value = false;
+                    await loadData();
+                };
+                
+                const saveOvertime = async () => {
+                    const d = overtimeForm.value.date.split('T')[0];
+                    if(editingOvertimeId.value) {
+                        await api('/overtime/'+editingOvertimeId.value, { method: 'PUT', body: JSON.stringify({ date: d, hours: overtimeForm.value.hours, reason: overtimeForm.value.reason }) });
+                    } else {
+                        await api('/overtime', { method: 'POST', body: JSON.stringify({ date: d, hours: overtimeForm.value.hours, reason: overtimeForm.value.reason }) });
+                    }
+                    showOvertimeDialog.value = false;
+                    await loadData();
+                };
+                
+                const saveUser = async () => {
+                    await api('/users', { method: 'POST', body: JSON.stringify(userForm.value) });
+                    showUserDialog.value = false;
+                    await loadData();
+                };
+                
+                const openEditTimeoff = (row) => { editingTimeoffId.value = row.id; timeoffForm.value = { date: row.date, hours: row.hours, reason: row.reason }; showTimeoffDialog.value = true; };
+                const openEditOvertime = (row) => { editingOvertimeId.value = row.id; overtimeForm.value = { date: row.date, hours: row.hours, reason: row.reason }; showOvertimeDialog.value = true; };
+                
+                const confirmDeleteTimeoff = async (id) => { if(confirm('确定删除？')) { await api('/time-off/'+id, { method: 'DELETE' }); await loadData(); } };
+                const confirmDeleteOvertime = async (id) => { if(confirm('确定删除？')) { await api('/overtime/'+id, { method: 'DELETE' }); await loadData(); } };
+                const confirmDeleteUser = async (id) => { if(confirm('确定删除？')) { await api('/users/'+id, { method: 'DELETE' }); await loadData(); } };
+                const confirmDeleteShift = async (id) => { if(confirm('确定删除？')) { await api('/shifts/'+id, { method: 'DELETE' }); await loadData(); } };
+                
+                const openShiftDialog = (edit, row) => {
+                    editingShiftId.value = row ? row.id : null;
+                    shiftForm.value = row ? { user_id: row.user_id, date: row.date, shift_type: row.shift_type, note: row.note||'' } : { user_id: null, date: new Date().toISOString().split('T')[0], shift_type: '', note: '' };
+                    showShiftDialog.value = true;
+                };
+                
+                const saveShift = async () => {
+                    if(!shiftForm.value.user_id) { alert('请选择人员'); return; }
+                    const d = shiftForm.value.date.split('T')[0];
+                    if(editingShiftId.value) {
+                        await api('/shifts/'+editingShiftId.value, { method: 'PUT', body: JSON.stringify({ shift_type: shiftForm.value.shift_type, note: shiftForm.value.note }) });
+                    } else {
+                        await api('/shifts', { method: 'POST', body: JSON.stringify({ user_id: shiftForm.value.user_id, date: d, shift_type: shiftForm.value.shift_type, note: shiftForm.value.note }) });
+                    }
+                    showShiftDialog.value = false;
+                    await loadData();
+                };
+                
+                const toggleUserRole = async (user) => { await api('/users/'+user.id+'/role', { method: 'PUT', body: JSON.stringify({ role: user.role==='admin'?'member':'admin' }) }); await loadData(); };
+                const openResetPassword = async (user) => { await api('/users/'+user.id+'/reset-password', { method: 'POST', body: JSON.stringify({ password: '123456' }) }); alert('密码已重置为 123456'); };
+                
+                const saveWebhookConfig = async () => { await api('/webhook/config', { method: 'POST', body: JSON.stringify(webhookForm.value) }); alert('配置已保存'); };
+                const testWebhook = async () => { await api('/webhook/test', { method: 'POST', body: JSON.stringify({ title: '测试', content: '测试消息' }) }); alert('测试推送已发送'); };
+                
+                const changePassword = async () => { await api('/auth/change-password', { method: 'POST', body: JSON.stringify(passwordForm.value) }); alert('密码修改成功'); };
+                
+                const loadUserInfo = async () => {
+                    try {
+                        const u = await api('/users');
+                        const me = u.find(user => Number(user.id) === Number(currentUser.value.id));
+                        if (me) {
+                            currentUser.value.name = me.name;
+                        }
+                    } catch(e) { console.error('加载用户信息失败:', e); }
+                };
+                
+                onMounted(() => {
+                    const token = localStorage.getItem('token');
+                    if (token) {
+                        const payload = JSON.parse(atob(token.split('.')[1]));
+                        currentUser.value = { id: payload.sub, name: '用户', role: payload.role };
+                        loadData().then(() => loadUserInfo());
+                    }
+                });
+                
+                return { currentUser, currentPage, menuOpen, loginForm, users, shifts, timeoffList, overtimeList, myStats, webhookForm, passwordForm, showShiftDialog, showTimeoffDialog, showOvertimeDialog, showUserDialog, shiftForm, timeoffForm, overtimeForm, userForm, pageTitle, recentShifts, myShifts, handleLogin, handleLogout, loadData, loadUserInfo, openShiftDialog, saveShift, confirmDeleteShift, saveTimeoff, saveOvertime, saveUser, approveTimeoff, approveOvertime, openEditTimeoff, openEditOvertime, confirmDeleteTimeoff, confirmDeleteOvertime, confirmDeleteUser, toggleUserRole, openResetPassword, saveWebhookConfig, testWebhook, changePassword };
+            }
+        }).use(ElementPlus).mount('#app');
+    </script>
+</body>
+</html>
