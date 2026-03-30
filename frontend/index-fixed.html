@@ -100,14 +100,16 @@
         }
         .month-labels {
             display: flex;
-            padding-left: 40px;
+            padding-left: 36px;  /* 32px(星期标签宽度) + 4px(右边距),与热力图网格对齐 */
             margin-bottom: 8px;
             color: #666;
             font-size: 11px;
+            width: max-content;
         }
         .month-label {
             text-align: center;
             color: #666;
+            flex-shrink: 0;  /* 防止 flex 压缩 */
         }
         .heatmap-grid {
             display: flex;
@@ -185,8 +187,8 @@
         .heatmap-legend {
             display: flex;
             align-items: center;
-            justify-content: flex-end;
-            gap: 12px;
+            justify-content: center;
+            gap: 16px;
             margin-top: 16px;
             font-size: 11px;
             color: #666;
@@ -368,7 +370,7 @@
                             <div class="heatmap-container">
                                 <!-- 月份标签 -->
                                 <div class="month-labels">
-                                    <span v-for="(month, index) in monthLabels" :key="index" class="month-label" :style="{ width: monthWidth + 'px' }">{{ month }}</span>
+                                    <span v-for="(month, index) in monthLabels" :key="index" class="month-label" :style="{ width: monthWidths[index] + 'px' }">{{ month }}</span>
                                 </div>
                                 
                                 <!-- 热力图网格 -->
@@ -666,11 +668,33 @@
                     return months.slice(startMonth);
                 });
                 
-                const monthWidth = computed(() => {
-                    const weeks = weekData.value.length;
-                    if (weeks === 0) return 80;
-                    const avgWeeksPerMonth = weeks / 12;
-                    return Math.max(60, Math.floor(avgWeeksPerMonth * CELL_SIZE));
+                const monthWidths = computed(() => {
+                    const weeks = weekData.value;
+                    if (weeks.length === 0) return Array(12).fill(80);
+                    
+                    const firstWeek = weeks[0];
+                    const firstDay = firstWeek.days.find(d => d !== null);
+                    if (!firstDay) return Array(12).fill(80);
+                    
+                    const startMonth = new Date(firstDay.date).getMonth();
+                    const widths = [];
+                    
+                    for (let m = 0; m < 12 - startMonth; m++) {
+                        const monthIndex = startMonth + m;
+                        let weekCount = 0;
+                        
+                        weeks.forEach(week => {
+                            week.days.forEach(day => {
+                                if (day && new Date(day.date).getMonth() === monthIndex) {
+                                    weekCount++;
+                                }
+                            });
+                        });
+                        
+                        widths.push(Math.max(50, weekCount * CELL_SIZE));
+                    }
+                    
+                    return widths;
                 });
                 
                 const weekData = computed(() => {
@@ -886,7 +910,7 @@
                     }
                 });
                 
-                return { currentUser, currentPage, menuOpen, loginForm, users, shifts, timeoffList, overtimeList, myStats, webhookForm, passwordForm, showShiftDialog, showTimeoffDialog, showOvertimeDialog, showUserDialog, shiftForm, timeoffForm, overtimeForm, userForm, pageTitle, recentShifts, myShifts, months, monthLabels, monthWidth, weekData, tooltip, handleLogin, handleLogout, loadData, loadUserInfo, openShiftDialog, saveShift, confirmDeleteShift, saveTimeoff, saveOvertime, saveUser, approveTimeoff, approveOvertime, openEditTimeoff, openEditOvertime, confirmDeleteTimeoff, confirmDeleteOvertime, confirmDeleteUser, toggleUserRole, openResetPassword, saveWebhookConfig, testWebhook, changePassword, getCellClass, showTooltip, hideTooltip };
+                return { currentUser, currentPage, menuOpen, loginForm, users, shifts, timeoffList, overtimeList, myStats, webhookForm, passwordForm, showShiftDialog, showTimeoffDialog, showOvertimeDialog, showUserDialog, shiftForm, timeoffForm, overtimeForm, userForm, pageTitle, recentShifts, myShifts, months, monthLabels, monthWidths, weekData, tooltip, handleLogin, handleLogout, loadData, loadUserInfo, openShiftDialog, saveShift, confirmDeleteShift, saveTimeoff, saveOvertime, saveUser, approveTimeoff, approveOvertime, openEditTimeoff, openEditOvertime, confirmDeleteTimeoff, confirmDeleteOvertime, confirmDeleteUser, toggleUserRole, openResetPassword, saveWebhookConfig, testWebhook, changePassword, getCellClass, showTooltip, hideTooltip };
             }
         }).use(ElementPlus).mount('#app');
     </script>
