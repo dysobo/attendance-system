@@ -7,10 +7,11 @@
 ## 📋 项目信息
 
 - **项目名称**: 考勤管理系统 (Attendance Management System)
-- **版本**: v1.0.0
+- **版本**: v1.4.2
 - **开发时间**: 2026-03-30
-- **部署地址**: http://您的服务器地址
-- **服务器**: ECS 您的服务器 IP:8888
+- **部署地址**: http://x.dysobo.cn:8888/kq
+- **服务器**: ECS 114.134.184.210:8888
+- **GitHub**: https://github.com/dysobo/attendance-system
 
 ---
 
@@ -65,6 +66,13 @@
 - ✅ 表格横向滚动
 - ✅ 对话框适配
 
+### 8️⃣ 数据可视化
+- ✅ 考勤热力图（GitHub 风格）
+- ✅ 按月份分组显示
+- ✅ 图例下方居中
+- ✅ 月份标签精确对齐
+- ✅ 颜色深浅表示加班时长
+
 ---
 
 ## 🏗️ 技术架构
@@ -103,6 +111,8 @@ attendance-system/
 │   └── requirements.txt       # Python 依赖
 ├── frontend/                   # 前端代码
 │   ├── index.html             # 单页应用
+│   ├── index-fixed.html       # 修复版本
+│   ├── index-heatmap-optimized.html  # 热力图优化版
 │   └── index-backup-*.html    # 备份文件
 ├── deploy/                     # 部署脚本
 │   └── deploy.sh              # 一键部署脚本
@@ -345,42 +355,48 @@ systemctl restart nginx
 
 ### 查看服务状态
 ```bash
-ssh root@您的服务器 IP -p 443 "systemctl status attendance.service"
+ssh root@114.134.184.210 -p 443 "systemctl status attendance.service"
 ```
 
 ### 重启服务
 ```bash
-ssh root@您的服务器 IP -p 443 "systemctl restart attendance.service"
+ssh root@114.134.184.210 -p 443 "systemctl restart attendance.service"
 ```
 
 ### 查看日志
 ```bash
-ssh root@您的服务器 IP -p 443 "journalctl -u attendance.service -f"
+ssh root@114.134.184.210 -p 443 "journalctl -u attendance.service -f"
 ```
 
 ### 备份数据库
 ```bash
-ssh root@您的服务器 IP -p 443 "cp /opt/attendance/backend/attendance.db /root/attendance-backup-$(date +%Y%m%d).db"
+ssh root@114.134.184.210 -p 443 "cp /var/www/html/kq/backend/attendance.db /root/attendance-backup-$(date +%Y%m%d).db"
 ```
 
 ### 恢复数据库
 ```bash
-ssh root@您的服务器 IP -p 443 "cp /root/attendance-backup-20260330.db /opt/attendance/backend/attendance.db && systemctl restart attendance.service"
+ssh root@114.134.184.210 -p 443 "cp /root/attendance-backup-20260330.db /var/www/html/kq/backend/attendance.db && systemctl restart attendance.service"
 ```
 
 ---
 
 ## 📞 技术支持
 
-- **服务器**: ECS 您的服务器 IP
-- **部署路径**: /opt/attendance/
-- **前端路径**: /opt/attendance/frontend/
-- **后端路径**: /opt/attendance/backend/
-- **数据库**: /opt/attendance/backend/attendance.db
+- **服务器**: ECS 114.134.184.210
+- **部署路径**: /var/www/html/kq/
+- **前端路径**: /var/www/html/kq/frontend/
+- **后端路径**: /var/www/html/kq/backend/
+- **数据库**: /var/www/html/kq/backend/attendance.db
 
 ---
 
 ## 📝 更新日志
+
+### v1.4.2 (2026-03-30) - 热力图布局优化 🎨
+- ✅ **图例位置优化**: 从右下角改为下方居中显示
+- ✅ **月份对齐优化**: 按实际周数精确计算宽度，完美对齐
+- ✅ **布局改进**: 优化热力图整体视觉效果
+- ✅ **代码优化**: 月份宽度动态计算（每月宽度 = 该月周数 × 14px）
 
 ### v1.0.0 (2026-03-30)
 - ✅ 初始版本发布
