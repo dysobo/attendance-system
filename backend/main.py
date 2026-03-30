@@ -613,17 +613,20 @@ def get_summary(current_user: database.User = Depends(get_current_user), db: Ses
     total_pending_overtime = 0
     
     for user in users:
-        # 调休统计 - 本年度
-        approved_time_off = db.query(database.TimeOffRequest).filter(
+        # 调休统计 - 本年度（按小时计算）
+        approved_time_off_records = db.query(database.TimeOffRequest).filter(
             database.TimeOffRequest.user_id == user.id,
             database.TimeOffRequest.status == "approved",
             database.TimeOffRequest.date >= year_start
-        ).count()
-        pending_time_off = db.query(database.TimeOffRequest).filter(
+        ).all()
+        approved_time_off = sum(r.hours for r in approved_time_off_records)
+        
+        pending_time_off_records = db.query(database.TimeOffRequest).filter(
             database.TimeOffRequest.user_id == user.id,
             database.TimeOffRequest.status == "pending",
             database.TimeOffRequest.date >= year_start
-        ).count()
+        ).all()
+        pending_time_off = sum(r.hours for r in pending_time_off_records)
         
         # 加班统计 - 本年度
         approved_overtime = db.query(database.OvertimeRecord).filter(
