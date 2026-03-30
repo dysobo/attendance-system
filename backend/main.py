@@ -440,20 +440,29 @@ def list_overtime(user_id: Optional[int] = None, status: Optional[str] = None, d
         })
     return result
 
-# Webhook 配置文件路径
-WEBHOOK_CONFIG_FILE = os.path.join(os.path.dirname(__file__), "webhook_config.json")
+# Webhook 配置文件路径（使用绝对路径，确保 systemd 服务下也能正确访问）
+WEBHOOK_CONFIG_FILE = "/opt/attendance/backend/webhook_config.json"
 
 def load_webhook_config():
     """加载 webhook 配置"""
-    if os.path.exists(WEBHOOK_CONFIG_FILE):
-        with open(WEBHOOK_CONFIG_FILE, "r") as f:
-            return json.load(f)
+    try:
+        if os.path.exists(WEBHOOK_CONFIG_FILE):
+            with open(WEBHOOK_CONFIG_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"加载 webhook 配置失败：{e}")
     return {"enabled": False, "url": "", "route_id": "", "notify_time_off": True, "notify_overtime": True, "notify_time_off_approved": False, "notify_overtime_approved": False}
 
 def save_webhook_config(config: dict):
     """保存 webhook 配置"""
-    with open(WEBHOOK_CONFIG_FILE, "w") as f:
-        json.dump(config, f, indent=2)
+    try:
+        with open(WEBHOOK_CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(config, f, indent=2, ensure_ascii=False)
+        print(f"✅ webhook 配置已保存到：{WEBHOOK_CONFIG_FILE}")
+        return True
+    except Exception as e:
+        print(f"保存 webhook 配置失败：{e}")
+        return False
 
 def send_webhook(config: dict, title: str, content: str):
     """发送 webhook 通知"""
