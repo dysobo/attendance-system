@@ -441,8 +441,9 @@ def list_overtime(user_id: Optional[int] = None, status: Optional[str] = None, d
         })
     return result
 
-# Webhook 配置文件路径（使用绝对路径，确保 systemd 服务下也能正确访问）
-WEBHOOK_CONFIG_FILE = "/opt/attendance/backend/webhook_config.json"
+# Webhook 配置文件路径（使用相对路径，与 main.py 同目录）
+import os
+WEBHOOK_CONFIG_FILE = os.path.join(os.path.dirname(__file__), "webhook_config.json")
 
 def load_webhook_config():
     """加载 webhook 配置"""
@@ -457,6 +458,8 @@ def load_webhook_config():
 def save_webhook_config(config: dict):
     """保存 webhook 配置"""
     try:
+        # 确保目录存在
+        os.makedirs(os.path.dirname(WEBHOOK_CONFIG_FILE), exist_ok=True)
         with open(WEBHOOK_CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump(config, f, indent=2, ensure_ascii=False)
         print(f"✅ webhook 配置已保存到：{WEBHOOK_CONFIG_FILE}")
