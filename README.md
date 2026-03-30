@@ -438,6 +438,20 @@ ssh root@服务器 IP -p 端口 "cp /root/attendance-backup-20260330.db /path/to
 
 ## 📝 更新日志
 
+### v1.4.3 (2026-03-30) - 修复推送配置丢失 Bug 🐛
+
+**🔧 Bug 修复**
+- ✅ 修复 Webhook 配置文件路径错误导致配置自动关闭的问题
+- ✅ 配置文件改为相对路径（backend/webhook_config.json）
+- ✅ 保存配置时自动创建目录
+- ✅ 配置持久化正常，重启不丢失
+
+**问题原因**：
+- 原路径 `/opt/attendance/backend/webhook_config.json` 目录不存在
+- 保存配置时写入失败，重启后读取默认值 enabled: false
+
+---
+
 ### v1.4.2 (2026-03-30) - 首个正式发布版本 🎉
 
 **🎨 数据可视化**
