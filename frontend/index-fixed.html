@@ -89,6 +89,127 @@
             z-index: 9999;
             pointer-events: none;
         }
+        
+        /* 热力图样式 */
+        .heatmap-container {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            font-size: 11px;
+            overflow-x: auto;
+            padding: 16px 0;
+            position: relative;
+        }
+        .month-labels {
+            display: flex;
+            justify-content: space-around;
+            padding-left: 40px;
+            margin-bottom: 8px;
+            color: #666;
+            font-size: 11px;
+        }
+        .month-label {
+            min-width: 80px;
+            text-align: center;
+        }
+        .heatmap-grid {
+            display: flex;
+            gap: 2px;
+        }
+        .weekday-labels {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            margin-right: 4px;
+            color: #666;
+            font-size: 10px;
+        }
+        .weekday-label {
+            height: 12px;
+            line-height: 12px;
+            text-align: right;
+            min-width: 32px;
+        }
+        .week-column {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .heatmap-cell {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+            background-color: #ebedf0;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .heatmap-cell:hover {
+            transform: scale(1.3);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            z-index: 10;
+            position: relative;
+        }
+        .cell-overtime-1 { background-color: #9be9a8; }
+        .cell-overtime-2 { background-color: #40c463; }
+        .cell-overtime-3 { background-color: #30a14e; }
+        .cell-overtime-4 { background-color: #216e39; }
+        .cell-leave-1 { background-color: #fff4b8; }
+        .cell-leave-2 { background-color: #ffe066; }
+        .cell-leave-3 { background-color: #ffc107; }
+        .cell-leave-4 { background-color: #ff9800; }
+        .heatmap-tooltip {
+            position: fixed;
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-size: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            z-index: 10000;
+            pointer-events: none;
+            max-width: 200px;
+        }
+        .tooltip-date {
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        .tooltip-detail {
+            color: #666;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .tooltip-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 2px;
+            flex-shrink: 0;
+        }
+        .heatmap-legend {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 12px;
+            margin-top: 16px;
+            font-size: 11px;
+            color: #666;
+        }
+        .legend-group {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .legend-label {
+            margin-right: 4px;
+            font-weight: 500;
+        }
+        .legend-cells {
+            display: flex;
+            gap: 2px;
+        }
+        .legend-cell {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+        }
     </style>
 </head>
 <body>
@@ -239,7 +360,82 @@
                     <!-- 加班记录 -->
                     <div v-show="currentPage === 'overtime'">
                         <el-button type="primary" @click="showOvertimeDialog=true">➕ 登记加班</el-button>
-                        <div class="table-wrapper" style="margin-top:15px">
+                        
+                        <!-- 加班热力图 -->
+                        <div style="margin-top:20px;background:#fff;padding:20px;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.08)">
+                            <h3 style="margin-bottom:15px;font-size:16px;color:#333">📊 本年度加班调休热力图</h3>
+                            
+                            <!-- 热力图容器 -->
+                            <div class="heatmap-container">
+                                <!-- 月份标签 -->
+                                <div class="month-labels">
+                                    <span v-for="month in months" :key="month" class="month-label">{{ month }}</span>
+                                </div>
+                                
+                                <!-- 热力图网格 -->
+                                <div class="heatmap-grid">
+                                    <!-- 星期标签 -->
+                                    <div class="weekday-labels">
+                                        <span class="weekday-label">日</span>
+                                        <span class="weekday-label"></span>
+                                        <span class="weekday-label">二</span>
+                                        <span class="weekday-label"></span>
+                                        <span class="weekday-label">四</span>
+                                        <span class="weekday-label"></span>
+                                        <span class="weekday-label">六</span>
+                                    </div>
+                                    
+                                    <!-- 周列 -->
+                                    <div v-for="(week, weekIndex) in weekData" :key="weekIndex" class="week-column">
+                                        <div
+                                            v-for="(day, dayIndex) in week.days"
+                                            :key="dayIndex"
+                                            class="heatmap-cell"
+                                            :class="getCellClass(day)"
+                                            @mouseenter="showTooltip($event, day)"
+                                            @mouseleave="hideTooltip"
+                                        ></div>
+                                    </div>
+                                </div>
+                                
+                                <!-- 图例 -->
+                                <div class="heatmap-legend">
+                                    <div class="legend-group">
+                                        <span class="legend-label">加班</span>
+                                        <div class="legend-cells">
+                                            <div class="legend-cell" style="background:#9be9a8"></div>
+                                            <div class="legend-cell" style="background:#40c463"></div>
+                                            <div class="legend-cell" style="background:#30a14e"></div>
+                                            <div class="legend-cell" style="background:#216e39"></div>
+                                        </div>
+                                    </div>
+                                    <div class="legend-group">
+                                        <span class="legend-label">调休</span>
+                                        <div class="legend-cells">
+                                            <div class="legend-cell" style="background:#fff4b8"></div>
+                                            <div class="legend-cell" style="background:#ffe066"></div>
+                                            <div class="legend-cell" style="background:#ffc107"></div>
+                                            <div class="legend-cell" style="background:#ff9800"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- 悬浮提示 -->
+                                <div v-if="tooltip.visible" class="heatmap-tooltip" :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }">
+                                    <div class="tooltip-date">{{ tooltip.date }}</div>
+                                    <div v-if="tooltip.type" class="tooltip-detail">
+                                        <div class="tooltip-dot" :style="{ backgroundColor: tooltip.color }"></div>
+                                        <span>{{ tooltip.typeText }} {{ tooltip.hours }}小时</span>
+                                    </div>
+                                    <div v-if="tooltip.reason" class="tooltip-detail" style="margin-top:4px;color:#999">
+                                        {{ tooltip.reason }}
+                                    </div>
+                                    <div v-if="!tooltip.type" class="tooltip-detail">无记录</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="table-wrapper" style="margin-top:20px">
                             <el-table :data="overtimeList" stripe>
                                 <el-table-column prop="date" label="日期" width="100"></el-table-column>
                                 <el-table-column prop="hours" label="时长" width="60"></el-table-column>
@@ -457,6 +653,104 @@
                     }).sort((a, b) => new Date(a.date) - new Date(b.date));
                 });
                 
+                // 热力图数据
+                const months = ['1 月', '2 月', '3 月', '4 月', '5 月', '6 月', '7 月', '8 月', '9 月', '10 月', '11 月', '12 月'];
+                const tooltip = ref({ visible: false, x: 0, y: 0, date: '', type: null, typeText: '', hours: 0, reason: '', color: '' });
+                
+                const weekData = computed(() => {
+                    const year = new Date().getFullYear();
+                    const weeks = [];
+                    const firstDay = new Date(year, 0, 1);
+                    const lastDay = new Date(year, 11, 31);
+                    let currentWeekStart = new Date(firstDay);
+                    currentWeekStart.setDate(currentWeekStart.getDate() - firstDay.getDay());
+                    
+                    // 合并加班和调休数据
+                    const allRecords = {};
+                    overtimeList.value.forEach(r => {
+                        if (r.status === 'approved') {
+                            allRecords[r.date] = { type: 'overtime', hours: r.hours, reason: r.reason || '' };
+                        }
+                    });
+                    timeoffList.value.forEach(r => {
+                        if (r.status === 'approved') {
+                            allRecords[r.date] = { type: 'leave', hours: r.hours, reason: r.reason || '' };
+                        }
+                    });
+                    
+                    while (currentWeekStart <= lastDay) {
+                        const week = { days: [] };
+                        for (let i = 0; i < 7; i++) {
+                            const date = new Date(currentWeekStart);
+                            date.setDate(date.getDate() + i);
+                            const dateStr = formatDate(date);
+                            const isCurrentYear = date.getFullYear() === year;
+                            if (isCurrentYear) {
+                                const info = allRecords[dateStr];
+                                week.days.push(info ? { date: dateStr, type: info.type, hours: info.hours, reason: info.reason } : { date: dateStr, type: null, hours: 0 });
+                            } else {
+                                week.days.push(null);
+                            }
+                        }
+                        weeks.push(week);
+                        currentWeekStart.setDate(currentWeekStart.getDate() + 7);
+                    }
+                    return weeks;
+                });
+                
+                function formatDate(date) {
+                    const y = date.getFullYear();
+                    const m = String(date.getMonth() + 1).padStart(2, '0');
+                    const d = String(date.getDate()).padStart(2, '0');
+                    return `${y}-${m}-${d}`;
+                }
+                
+                function formatDisplayDate(dateStr) {
+                    const [y, m, d] = dateStr.split('-');
+                    return `${y}年${parseInt(m)}月${parseInt(d)}日`;
+                }
+                
+                function getColorLevel(hours) {
+                    if (hours <= 0) return 0;
+                    if (hours <= 2) return 1;
+                    if (hours <= 4) return 2;
+                    if (hours <= 6) return 3;
+                    return 4;
+                }
+                
+                function getCellClass(day) {
+                    if (!day || !day.type) return '';
+                    const level = getColorLevel(day.hours);
+                    return `cell-${day.type}-${level}`;
+                }
+                
+                function getColor(type, hours) {
+                    const colors = {
+                        overtime: ['#ebedf0', '#9be9a8', '#40c463', '#30a14e', '#216e39'],
+                        leave: ['#ebedf0', '#fff4b8', '#ffe066', '#ffc107', '#ff9800']
+                    };
+                    return colors[type][getColorLevel(hours)];
+                }
+                
+                function showTooltip(event, day) {
+                    if (!day) return;
+                    tooltip.value = {
+                        visible: true,
+                        x: event.clientX + 10,
+                        y: event.clientY + 10,
+                        date: formatDisplayDate(day.date),
+                        type: day.type,
+                        typeText: day.type === 'overtime' ? '加班' : day.type === 'leave' ? '调休' : '',
+                        hours: day.hours,
+                        reason: day.reason || '',
+                        color: day.type ? getColor(day.type, day.hours) : '#ebedf0'
+                    };
+                }
+                
+                function hideTooltip() {
+                    tooltip.value.visible = false;
+                }
+                
                 const api = async (endpoint, options = {}) => {
                     const token = localStorage.getItem('token');
                     const headers = { 'Content-Type': 'application/json' };
@@ -576,7 +870,7 @@
                     }
                 });
                 
-                return { currentUser, currentPage, menuOpen, loginForm, users, shifts, timeoffList, overtimeList, myStats, webhookForm, passwordForm, showShiftDialog, showTimeoffDialog, showOvertimeDialog, showUserDialog, shiftForm, timeoffForm, overtimeForm, userForm, pageTitle, recentShifts, myShifts, handleLogin, handleLogout, loadData, loadUserInfo, openShiftDialog, saveShift, confirmDeleteShift, saveTimeoff, saveOvertime, saveUser, approveTimeoff, approveOvertime, openEditTimeoff, openEditOvertime, confirmDeleteTimeoff, confirmDeleteOvertime, confirmDeleteUser, toggleUserRole, openResetPassword, saveWebhookConfig, testWebhook, changePassword };
+                return { currentUser, currentPage, menuOpen, loginForm, users, shifts, timeoffList, overtimeList, myStats, webhookForm, passwordForm, showShiftDialog, showTimeoffDialog, showOvertimeDialog, showUserDialog, shiftForm, timeoffForm, overtimeForm, userForm, pageTitle, recentShifts, myShifts, months, weekData, tooltip, handleLogin, handleLogout, loadData, loadUserInfo, openShiftDialog, saveShift, confirmDeleteShift, saveTimeoff, saveOvertime, saveUser, approveTimeoff, approveOvertime, openEditTimeoff, openEditOvertime, confirmDeleteTimeoff, confirmDeleteOvertime, confirmDeleteUser, toggleUserRole, openResetPassword, saveWebhookConfig, testWebhook, changePassword, getCellClass, showTooltip, hideTooltip };
             }
         }).use(ElementPlus).mount('#app');
     </script>
