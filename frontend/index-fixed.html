@@ -820,7 +820,8 @@
                 const handleLogout = () => { localStorage.removeItem('token'); currentUser.value = null; };
                 
                 const loadData = async () => {
-                    const stats = await api('/stats/my-summary');
+                    // 管理员调用 /stats/summary 获取组员总和，组员调用 /stats/my-summary 获取自己的数据
+                    const stats = await api('/stats/summary');
                     const u = await api('/users');
                     myStats.value = stats;
                     users.value = u;
