@@ -591,43 +591,68 @@ def delete_overtime(record_id: int, current_user: database.User = Depends(get_cu
 # --- 统计汇总 ---
 
 @app.get("/api/stats/summary")
-def get_summary(db: Session = Depends(database.get_db)):
-    """获取所有人的统计汇总"""
-    users = db.query(database.User).all()
-    result = []
+def get_summary(current_user: database.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
+    """获取统计汇总
+    - 管理员：统计所有组员的总和（本年度）
+    - 组员：仅统计自己的
+    """
+    from datetime import datetime
+    current_year = datetime.now().year
+    year_start = date(current_year, 1, 1)
+    
+    # 如果是管理员，统计所有组员；如果是组员，只统计自己
+    if current_user.role == "admin":
+        users = db.query(database.User).filter(database.User.role == "member").all()
+    else:
+        users = [current_user]
+    
+    # 初始化总和
+    total_approved_time_off = 0
+    total_pending_time_off = 0
+    total_overtime_hours = 0.0
+    total_pending_overtime = 0
     
     for user in users:
-        # 调休统计
+        # 调休统计 - 本年度
         approved_time_off = db.query(database.TimeOffRequest).filter(
             database.TimeOffRequest.user_id == user.id,
-            database.TimeOffRequest.status == "approved"
+            database.TimeOffRequest.status == "approved",
+            database.TimeOffRequest.date >= year_start
         ).count()
         pending_time_off = db.query(database.TimeOffRequest).filter(
             database.TimeOffRequest.user_id == user.id,
-            database.TimeOffRequest.status == "pending"
+            database.TimeOffRequest.status == "pending",
+            database.TimeOffRequest.date >= year_start
         ).count()
         
-        # 加班统计
+        # 加班统计 - 本年度
         approved_overtime = db.query(database.OvertimeRecord).filter(
             database.OvertimeRecord.user_id == user.id,
-            database.OvertimeRecord.status == "approved"
+            database.OvertimeRecord.status == "approved",
+            database.OvertimeRecord.date >= year_start
         ).all()
-        total_overtime_hours = sum(r.hours for r in approved_overtime)
+        total_overtime_hours += sum(r.hours for r in approved_overtime)
+        
+        # 待确认加班 - 所有（不限年度）
         pending_overtime = db.query(database.OvertimeRecord).filter(
             database.OvertimeRecord.user_id == user.id,
             database.OvertimeRecord.status == "pending"
         ).count()
         
-        result.append({
-            "user_id": user.id,
-            "user_name": user.name,
-            "time_off_approved": approved_time_off,
-            "time_off_pending": pending_time_off,
-            "overtime_hours": total_overtime_hours,
-            "overtime_pending": pending_overtime
-        })
+        # 累加
+        total_approved_time_off += approved_time_off
+        total_pending_time_off += pending_time_off
+        total_pending_overtime += pending_overtime
     
-    return result
+    # 返回总和
+    return {
+        "is_admin": current_user.role == "admin",
+        "total_users": len(users),
+        "time_off_approved": total_approved_time_off,
+        "time_off_pending": total_pending_time_off,
+        "overtime_hours": total_overtime_hours,
+        "overtime_pending": total_pending_overtime
+    }
 
 @app.get("/api/stats/my-summary")
 def get_my_summary(current_user: database.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
