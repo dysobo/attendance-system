@@ -87,7 +87,15 @@
             border-radius: 20px;
             font-size: 12px;
             z-index: 9999;
-            pointer-events: none;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-block;
+        }
+        
+        .version-tag:hover {
+            background: rgba(0,0,0,0.8);
+            transform: scale(1.05);
         }
         
         /* 热力图样式 */
@@ -258,8 +266,8 @@
                     <!-- 仪表盘 -->
                     <div v-show="currentPage === 'dashboard'">
                         <div class="stats-grid">
-                            <div class="stat-card blue"><div class="stat-label">已批准调休</div><div class="stat-number">{{ myStats.time_off_approved||0 }}天</div></div>
-                            <div class="stat-card pink"><div class="stat-label">待审批调休</div><div class="stat-number">{{ myStats.time_off_pending||0 }}天</div></div>
+                            <div class="stat-card blue"><div class="stat-label">已批准调休</div><div class="stat-number">{{ myStats.time_off_approved||0 }}小时</div></div>
+                            <div class="stat-card pink"><div class="stat-label">待审批调休</div><div class="stat-number">{{ myStats.time_off_pending||0 }}条</div></div>
                             <div class="stat-card cyan"><div class="stat-label">累计加班</div><div class="stat-number">{{ myStats.overtime_hours||0 }}小时</div></div>
                             <div class="stat-card green"><div class="stat-label">待确认加班</div><div class="stat-number">{{ myStats.overtime_pending||0 }}条</div></div>
                         </div>
@@ -603,7 +611,7 @@
     </div>
     
     <!-- 版本号 -->
-    <div class="version-tag">V1.4.4</div>
+    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V1.4.4</a>
     
     <script>
         const API_BASE = '/kq/api';
