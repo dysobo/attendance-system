@@ -100,15 +100,14 @@
         }
         .month-labels {
             display: flex;
-            justify-content: space-around;
             padding-left: 40px;
             margin-bottom: 8px;
             color: #666;
             font-size: 11px;
         }
         .month-label {
-            min-width: 80px;
             text-align: center;
+            color: #666;
         }
         .heatmap-grid {
             display: flex;
@@ -369,7 +368,7 @@
                             <div class="heatmap-container">
                                 <!-- 月份标签 -->
                                 <div class="month-labels">
-                                    <span v-for="month in months" :key="month" class="month-label">{{ month }}</span>
+                                    <span v-for="(month, index) in monthLabels" :key="index" class="month-label" :style="{ width: monthWidth + 'px' }">{{ month }}</span>
                                 </div>
                                 
                                 <!-- 热力图网格 -->
@@ -656,6 +655,23 @@
                 // 热力图数据
                 const months = ['1 月', '2 月', '3 月', '4 月', '5 月', '6 月', '7 月', '8 月', '9 月', '10 月', '11 月', '12 月'];
                 const tooltip = ref({ visible: false, x: 0, y: 0, date: '', type: null, typeText: '', hours: 0, reason: '', color: '' });
+                const CELL_SIZE = 14; // 12px cell + 2px gap
+                
+                const monthLabels = computed(() => {
+                    const firstWeek = weekData.value[0];
+                    if (!firstWeek) return months;
+                    const firstDay = firstWeek.days.find(d => d !== null);
+                    if (!firstDay) return months;
+                    const startMonth = new Date(firstDay.date).getMonth();
+                    return months.slice(startMonth);
+                });
+                
+                const monthWidth = computed(() => {
+                    const weeks = weekData.value.length;
+                    if (weeks === 0) return 80;
+                    const avgWeeksPerMonth = weeks / 12;
+                    return Math.max(60, Math.floor(avgWeeksPerMonth * CELL_SIZE));
+                });
                 
                 const weekData = computed(() => {
                     const year = new Date().getFullYear();
@@ -870,7 +886,7 @@
                     }
                 });
                 
-                return { currentUser, currentPage, menuOpen, loginForm, users, shifts, timeoffList, overtimeList, myStats, webhookForm, passwordForm, showShiftDialog, showTimeoffDialog, showOvertimeDialog, showUserDialog, shiftForm, timeoffForm, overtimeForm, userForm, pageTitle, recentShifts, myShifts, months, weekData, tooltip, handleLogin, handleLogout, loadData, loadUserInfo, openShiftDialog, saveShift, confirmDeleteShift, saveTimeoff, saveOvertime, saveUser, approveTimeoff, approveOvertime, openEditTimeoff, openEditOvertime, confirmDeleteTimeoff, confirmDeleteOvertime, confirmDeleteUser, toggleUserRole, openResetPassword, saveWebhookConfig, testWebhook, changePassword, getCellClass, showTooltip, hideTooltip };
+                return { currentUser, currentPage, menuOpen, loginForm, users, shifts, timeoffList, overtimeList, myStats, webhookForm, passwordForm, showShiftDialog, showTimeoffDialog, showOvertimeDialog, showUserDialog, shiftForm, timeoffForm, overtimeForm, userForm, pageTitle, recentShifts, myShifts, months, monthLabels, monthWidth, weekData, tooltip, handleLogin, handleLogout, loadData, loadUserInfo, openShiftDialog, saveShift, confirmDeleteShift, saveTimeoff, saveOvertime, saveUser, approveTimeoff, approveOvertime, openEditTimeoff, openEditOvertime, confirmDeleteTimeoff, confirmDeleteOvertime, confirmDeleteUser, toggleUserRole, openResetPassword, saveWebhookConfig, testWebhook, changePassword, getCellClass, showTooltip, hideTooltip };
             }
         }).use(ElementPlus).mount('#app');
     </script>

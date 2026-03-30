@@ -364,7 +364,8 @@ def create_time_off(request_data: TimeOffRequestCreate, current_user: database.U
         send_webhook(
             webhook_config,
             "🏖️ 调休申请",
-            f"{current_user.name} 申请调休\n日期：{request_data.date}\n时长：{request_data.hours}小时\n事由：{request_data.reason}"
+            f"{current_user.name} 申请调休\n日期：{request_data.date}\n时长：{request_data.hours}小时\n事由：{request_data.reason}",
+            "http://x.dysobo.cn:8888/kq/"
         )
     
     return {"id": request.id, "message": "调休申请已提交"}
@@ -464,7 +465,7 @@ def save_webhook_config(config: dict):
         print(f"保存 webhook 配置失败：{e}")
         return False
 
-def send_webhook(config: dict, title: str, content: str):
+def send_webhook(config: dict, title: str, content: str, link_url: str = ""):
     """发送 webhook 通知"""
     if not config.get("enabled") or not config.get("url") or not config.get("route_id"):
         return False
@@ -474,6 +475,8 @@ def send_webhook(config: dict, title: str, content: str):
             "title": title,
             "content": content
         }
+        if link_url:
+            payload["push_link_url"] = link_url
         response = requests.post(config.get("url", ""), json=payload, headers={"Content-Type": "application/json"}, timeout=10)
         if response.status_code == 200:
             print(f"✅ Webhook 通知发送成功：{title}")
@@ -533,7 +536,8 @@ def create_overtime(record_data: OvertimeRecordCreate, current_user: database.Us
         send_webhook(
             webhook_config,
             "⏰ 加班记录",
-            f"{current_user.name} 登记加班\n日期：{record_data.date}\n时长：{record_data.hours}小时\n事由：{record_data.reason}"
+            f"{current_user.name} 登记加班\n日期：{record_data.date}\n时长：{record_data.hours}小时\n事由：{record_data.reason}",
+            "http://x.dysobo.cn:8888/kq/"
         )
     
     return {"id": record.id, "message": "加班记录已提交"}
