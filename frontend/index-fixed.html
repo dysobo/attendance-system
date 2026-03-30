@@ -836,6 +836,9 @@
                     if (currentUser.value.role === 'admin') {
                         const [s, t, o] = await Promise.all([api('/shifts'), api('/time-off'), api('/overtime')]);
                         shifts.value = s; timeoffList.value = t; overtimeList.value = o;
+                        // 加载 webhook 配置
+                        const webhookConfig = await api('/webhook/config');
+                        webhookForm.value = webhookConfig;
                     } else {
                         const uid = currentUser.value.id;
                         const [s, t, o] = await Promise.all([api('/shifts?user_id='+uid), api('/time-off?user_id='+uid), api('/overtime?user_id='+uid)]);
