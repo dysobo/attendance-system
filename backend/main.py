@@ -416,7 +416,7 @@ def create_time_off(request_data: TimeOffRequestCreate, current_user: database.U
     webhook_config = load_webhook_config()
     if webhook_config.get("enabled") and webhook_config.get("notify_time_off"):
         link_url = f"http://x.dysobo.cn:8888/kq/?page=timeoff&id={request.id}"
-        content = f"申请人：{current_user.name}\n日期：{request_data.date}\n时长：{request_data.hours}小时\n事由：{request_data.reason}"
+        content = f"申请人：{current_user.name}\n日期：{request_data.date}\n时长：{request_data.hours}小时\n事由：{request_data.reason}\n\n👉 点击审批：{link_url}"
         send_webhook(
             webhook_config,
             "🏖️ 调休申请 - 待审批",
@@ -610,7 +610,7 @@ def create_overtime(record_data: OvertimeRecordCreate, current_user: database.Us
     webhook_config = load_webhook_config()
     if webhook_config.get("enabled") and webhook_config.get("notify_overtime"):
         link_url = f"http://x.dysobo.cn:8888/kq/?page=overtime&id={record.id}"
-        content = f"申请人：{current_user.name}\n日期：{record_data.date}\n时长：{record_data.hours}小时\n事由：{record_data.reason}"
+        content = f"申请人：{current_user.name}\n日期：{record_data.date}\n时长：{record_data.hours}小时\n事由：{record_data.reason}\n\n👉 点击确认：{link_url}"
         send_webhook(
             webhook_config,
             "⏰ 加班记录 - 待确认",
