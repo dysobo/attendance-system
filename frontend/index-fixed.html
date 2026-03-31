@@ -701,7 +701,7 @@
     </div>
     
     <!-- 版本号 -->
-    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V1.7.8</a>
+    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V1.7.9</a>
     
     <script>
         const API_BASE = '/kq/api';
@@ -952,7 +952,7 @@
                         y: event.clientY + 10,
                         date: formatDisplayDate(day.date),
                         type: day.type,
-                        typeText: typeText,
+                        typeText: detailText,  // ← 使用 detailText，不是 typeText
                         hours: day.hours,
                         reason: day.reason || '',
                         color: day.type ? getColor(day.type, day.hours) : '#ebedf0'
