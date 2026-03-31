@@ -906,7 +906,7 @@
                     // 再处理假期记录（所有 12 种类型）
                     timeoffList.value.forEach(r => {
                         if (r.status === 'approved') {
-                            if (allRecords[r.date]) {
+                            if (allRecords[r.date] && allRecords[r.date].type === 'overtime') {
                                 // 当天已有加班 → 合并为 both
                                 const existing = allRecords[r.date];
                                 allRecords[r.date] = { 
@@ -916,8 +916,17 @@
                                     overtimeHours: existing.overtimeHours,  // ← 使用保存的原始值
                                     leaveHours: (existing.leaveHours || 0) + r.hours  // ← 累加假期时长
                                 };
+                            } else if (allRecords[r.date] && allRecords[r.date].type === 'leave') {
+                                // 当天已有假期 → 累加假期时长
+                                const existing = allRecords[r.date];
+                                allRecords[r.date] = { 
+                                    type: 'leave',  // 保持假期类型
+                                    hours: existing.hours + r.hours,  // 累计时长
+                                    reason: (existing.reason || '') + ' + ' + (r.reason || ''),
+                                    leaveHours: (existing.leaveHours || 0) + r.hours  // ← 累加假期时长
+                                };
                             } else {
-                                // 当天没有加班 → 只记录假期
+                                // 当天没有记录 → 只记录假期
                                 allRecords[r.date] = { type: 'leave', hours: r.hours, reason: r.reason || '', leaveHours: r.hours };
                             }
                         }
