@@ -568,21 +568,63 @@
                     
                     <!-- 消息推送 -->
                     <div v-show="currentPage === 'webhook' && currentUser.role==='admin'">
-                        <el-form :model="webhookForm" label-width="100px" style="max-width:600px">
-                            <el-form-item label="启用推送"><el-switch v-model="webhookForm.enabled"></el-switch></el-form-item>
-                            <el-form-item label="推送地址"><el-input v-model="webhookForm.url" placeholder="https://nh.dysobo.cn:888/api/service/notify"></el-input></el-form-item>
-                            <el-form-item label="通道 ID"><el-input v-model="webhookForm.route_id" placeholder="route_skuo"></el-input></el-form-item>
-                            <el-form-item label="通知类型">
-                                <div style="display:flex;flex-direction:column;gap:10px">
-                                    <el-checkbox v-model="webhookForm.notify_time_off">调休申请</el-checkbox>
-                                    <el-checkbox v-model="webhookForm.notify_overtime">加班记录</el-checkbox>
-                                </div>
-                            </el-form-item>
-                            <el-form-item>
-                                <el-button type="primary" @click="saveWebhookConfig">保存配置</el-button>
-                                <el-button @click="testWebhook">测试推送</el-button>
-                            </el-form-item>
-                        </el-form>
+                        <el-tabs type="border-card">
+                            <!-- 企业微信配置 -->
+                            <el-tab-pane label="📱 企业微信 API">
+                                <el-form :model="wechatConfig" label-width="140px" style="max-width:600px">
+                                    <el-form-item label="启用企业微信推送">
+                                        <el-switch v-model="wechatConfig.enabled"></el-switch>
+                                    </el-form-item>
+                                    <el-form-item label="企业微信 API 地址">
+                                        <el-input v-model="wechatConfig.api_url" placeholder="https://qyapi.weixin.qq.com"></el-input>
+                                    </el-form-item>
+                                    <el-form-item label="CorpID">
+                                        <el-input v-model="wechatConfig.corp_id" placeholder="ww239ef8d083b060c3"></el-input>
+                                    </el-form-item>
+                                    <el-form-item label="Secret">
+                                        <el-input v-model="wechatConfig.secret" placeholder="EPMLrGD0_eHiiV9ECNVci16h0DXSXP9Bti7URVXMmwQ"></el-input>
+                                    </el-form-item>
+                                    <el-form-item label="AgentID">
+                                        <el-input-number v-model="wechatConfig.agent_id" :min="0" style="width:100%"></el-input-number>
+                                    </el-form-item>
+                                    <el-form-item label="Token">
+                                        <el-input v-model="wechatConfig.token" placeholder="KUhRNXvM"></el-input>
+                                    </el-form-item>
+                                    <el-form-item label="EncodingAESKey">
+                                        <el-input v-model="wechatConfig.encoding_aes_key" placeholder="nENwotH1z3MfPRrLt7REvweBhbOuhcPjNUicE3j83DK"></el-input>
+                                    </el-form-item>
+                                    <el-form-item>
+                                        <el-button type="primary" @click="saveWechatConfig">保存配置</el-button>
+                                        <el-button @click="testWechatPush">测试推送</el-button>
+                                    </el-form-item>
+                                    <el-alert title="使用说明" type="info" :closable="false" style="margin-top:20px">
+                                        <p>1. 在企业微信管理后台获取 CorpID 和 Secret</p>
+                                        <p>2. 创建自建应用，获取 AgentID</p>
+                                        <p>3. 用户管理 → 编辑用户 → 填写企业微信 ID（userid）</p>
+                                        <p>4. 启用推送后，审批结果会自动推送到个人</p>
+                                    </el-alert>
+                                </el-form>
+                            </el-tab-pane>
+                            
+                            <!-- Webhook 配置 -->
+                            <el-tab-pane label="🔗 Webhook 推送">
+                                <el-form :model="webhookForm" label-width="100px" style="max-width:600px">
+                                    <el-form-item label="启用推送"><el-switch v-model="webhookForm.enabled"></el-switch></el-form-item>
+                                    <el-form-item label="推送地址"><el-input v-model="webhookForm.url" placeholder="https://nh.dysobo.cn:888/api/service/notify"></el-input></el-form-item>
+                                    <el-form-item label="通道 ID"><el-input v-model="webhookForm.route_id" placeholder="route_skuo"></el-input></el-form-item>
+                                    <el-form-item label="通知类型">
+                                        <div style="display:flex;flex-direction:column;gap:10px">
+                                            <el-checkbox v-model="webhookForm.notify_time_off">调休申请</el-checkbox>
+                                            <el-checkbox v-model="webhookForm.notify_overtime">加班记录</el-checkbox>
+                                        </div>
+                                    </el-form-item>
+                                    <el-form-item>
+                                        <el-button type="primary" @click="saveWebhookConfig">保存配置</el-button>
+                                        <el-button @click="testWebhook">测试推送</el-button>
+                                    </el-form-item>
+                                </el-form>
+                            </el-tab-pane>
+                        </el-tabs>
                     </div>
                     
                     <!-- 数据导出 -->
@@ -752,7 +794,7 @@
     </div>
     
     <!-- 版本号 -->
-    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V3.0.0</a>
+    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V3.1.0</a>
     
     <script>
         const API_BASE = '/kq/api';
@@ -770,6 +812,7 @@
                 const overtimeList = ref([]);
                 const myStats = ref({});
                 const webhookForm = ref({ enabled: false, url: '', route_id: '', notify_time_off: true, notify_overtime: true });
+                const wechatConfig = ref({ enabled: false, api_url: 'https://qyapi.weixin.qq.com', corp_id: '', secret: '', agent_id: 1000006, token: '', encoding_aes_key: '' });
                 const passwordForm = ref({ oldPassword: '', newPassword: '', confirmPassword: '' });
                 const exportMonth = ref(new Date().getMonth() + 1);
                 const exportYear = ref(new Date().getFullYear());
@@ -1076,6 +1119,9 @@
                         // 加载 webhook 配置
                         const webhookConfig = await api('/webhook/config');
                         webhookForm.value = webhookConfig;
+                        // 加载企业微信配置
+                        const wechatCfg = await api('/wechat/config');
+                        wechatConfig.value = wechatCfg;
                     } else {
                         const uid = currentUser.value.id;
                         // 组员加载自己的排班 + 班组排班（便于联系他人）
@@ -1164,6 +1210,21 @@
                 
                 const saveWebhookConfig = async () => { await api('/webhook/config', { method: 'POST', body: JSON.stringify(webhookForm.value) }); alert('配置已保存'); };
                 const testWebhook = async () => { await api('/webhook/test', { method: 'POST', body: JSON.stringify({ title: '测试', content: '测试消息' }) }); alert('测试推送已发送'); };
+                
+                // 企业微信配置
+                const saveWechatConfig = async () => {
+                    await api('/wechat/config', { method: 'POST', body: JSON.stringify(wechatConfig.value) });
+                    alert('企业微信配置已保存');
+                };
+                
+                const testWechatPush = async () => {
+                    try {
+                        const result = await api('/wechat/test-push', { method: 'POST', body: JSON.stringify({ title: '测试推送', content: '这是一条测试消息', link: 'http://x.dysobo.cn:8888/kq/' }) });
+                        alert(result.message || '测试推送已发送');
+                    } catch (e) {
+                        alert('测试失败：' + e.message);
+                    }
+                };
                 
                 // 导出功能
                 const exportMonthlyStats = async () => {

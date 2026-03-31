@@ -67,6 +67,21 @@ class OvertimeRecord(Base):
     created_at = Column(DateTime, default=datetime.now)
 
 
+class WechatConfig(Base):
+    """企业微信配置表"""
+    __tablename__ = "wechat_config"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    api_url = Column(String(200), default="https://qyapi.weixin.qq.com")  # 企业微信 API 地址
+    corp_id = Column(String(100))  # CorpID
+    secret = Column(String(200))  # Secret
+    agent_id = Column(Integer)  # AgentID
+    token = Column(String(100))  # Token
+    encoding_aes_key = Column(String(200))  # EncodingAESKey
+    enabled = Column(Boolean, default=False)  # 是否启用
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
 # ==================== 数据库操作 ====================
 
 def init_db():

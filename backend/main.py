@@ -291,44 +291,150 @@ def bind_wechat(data: dict, current_user: database.User = Depends(get_current_us
     db.commit()
     return {"message": "绑定成功", "wechat_user_id": current_user.wechat_user_id}
 
-# ==================== 个人推送功能 ====================
+# ==================== 企业微信配置 ====================
 
-def send_personal_push(user_id: int, title: str, content: str, link_url: str = "", db: Session = None):
-    """发送个人推送通知"""
+@app.get("/api/wechat/config")
+def get_wechat_config(current_user: database.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
+    """获取企业微信配置（仅管理员）"""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+    
+    config = db.query(database.WechatConfig).first()
+    if not config:
+        return {
+            "api_url": "https://qyapi.weixin.qq.com",
+            "corp_id": "",
+            "secret": "",
+            "agent_id": 0,
+            "token": "",
+            "encoding_aes_key": "",
+            "enabled": False
+        }
+    
+    return {
+        "api_url": config.api_url,
+        "corp_id": config.corp_id,
+        "secret": config.secret,
+        "agent_id": config.agent_id,
+        "token": config.token,
+        "encoding_aes_key": config.encoding_aes_key,
+        "enabled": config.enabled
+    }
+
+@app.post("/api/wechat/config")
+def save_wechat_config(config_data: dict, current_user: database.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
+    """保存企业微信配置（仅管理员）"""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+    
+    config = db.query(database.WechatConfig).first()
+    if not config:
+        config = database.WechatConfig()
+        db.add(config)
+    
+    config.api_url = config_data.get("api_url", "https://qyapi.weixin.qq.com")
+    config.corp_id = config_data.get("corp_id", "")
+    config.secret = config_data.get("secret", "")
+    config.agent_id = config_data.get("agent_id", 0)
+    config.token = config_data.get("token", "")
+    config.encoding_aes_key = config_data.get("encoding_aes_key", "")
+    config.enabled = config_data.get("enabled", False)
+    config.updated_at = datetime.now()
+    
+    db.commit()
+    return {"message": "配置已保存"}
+
+@app.post("/api/wechat/test-push")
+def test_wechat_push(data: dict, current_user: database.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
+    """测试企业微信推送（仅管理员）"""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+    
+    # 发送给管理员自己
+    title = data.get("title", "测试推送")
+    content = data.get("content", "这是一条测试消息")
+    link_url = data.get("link", "http://x.dysobo.cn:8888/kq/")
+    
+    success = send_wechat_message(current_user.id, title, content, link_url, db)
+    
+    if success:
+        return {"message": "测试推送已发送"}
+    else:
+        raise HTTPException(status_code=500, detail="推送失败，请检查配置")
+
+# ==================== 企业微信推送函数 ====================
+
+def get_wechat_access_token(db: Session) -> str:
+    """获取企业微信 access_token"""
+    config = db.query(database.WechatConfig).filter(database.WechatConfig.enabled == True).first()
+    if not config or not config.corp_id or not config.secret:
+        return ""
+    
+    try:
+        url = f"{config.api_url}/cgi-bin/gettoken"
+        params = {
+            "corpid": config.corp_id,
+            "corpsecret": config.secret
+        }
+        response = requests.get(url, params=params, timeout=10)
+        result = response.json()
+        
+        if result.get("errcode") == 0:
+            return result.get("access_token", "")
+        else:
+            print(f"❌ 获取 access_token 失败：{result}")
+            return ""
+    except Exception as e:
+        print(f"❌ 获取 access_token 异常：{e}")
+        return ""
+
+def send_wechat_message(user_id: int, title: str, content: str, link_url: str = "", db: Session = None):
+    """发送企业微信消息"""
     if not db:
         return False
     
+    # 检查企业微信配置
+    config = db.query(database.WechatConfig).filter(database.WechatConfig.enabled == True).first()
+    if not config:
+        return False
+    
+    # 获取用户的企业微信 ID
     user = db.query(database.User).filter(database.User.id == user_id).first()
     if not user or not user.enable_push or not user.wechat_user_id:
         return False
     
-    # 使用现有的 webhook 接口，但指定个人的 route_id
-    # 这里需要根据实际的企业微信 API 来调整
-    # 暂时使用通用 webhook 接口
-    webhook_config = load_webhook_config()
-    if webhook_config.get("enabled"):
-        payload = {
-            "route_id": webhook_config.get("route_id", ""),
-            "title": title,
-            "content": content,
-            "touser": user.wechat_user_id  # 指定接收人
-        }
-        if link_url:
-            payload["push_link_url"] = link_url
-        
-        try:
-            response = requests.post(webhook_config.get("url", ""), json=payload, headers={"Content-Type": "application/json"}, timeout=10)
-            if response.status_code == 200:
-                print(f"✅ 个人推送发送成功：{user.name} - {title}")
-                return True
-            else:
-                print(f"❌ 个人推送发送失败：{response.status_code}")
-                return False
-        except Exception as e:
-            print(f"❌ 个人推送发送异常：{e}")
-            return False
+    # 获取 access_token
+    access_token = get_wechat_access_token(db)
+    if not access_token:
+        return False
     
-    return False
+    # 发送文本卡片消息
+    try:
+        url = f"{config.api_url}/cgi-bin/message/send?access_token={access_token}"
+        payload = {
+            "touser": user.wechat_user_id,
+            "msgtype": "textcard",
+            "agentid": config.agent_id,
+            "textcard": {
+                "title": title,
+                "description": content,
+                "url": link_url if link_url else "http://x.dysobo.cn:8888/kq/",
+                "btntxt": "查看详情"
+            }
+        }
+        
+        response = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=10)
+        result = response.json()
+        
+        if result.get("errcode") == 0:
+            print(f"✅ 企业微信消息发送成功：{user.name} - {title}")
+            return True
+        else:
+            print(f"❌ 企业微信消息发送失败：{result}")
+            return False
+    except Exception as e:
+        print(f"❌ 企业微信消息发送异常：{e}")
+        return False
 
 # --- 排班管理 ---
 
@@ -506,14 +612,14 @@ def approve_time_off(request_id: int, approve_data: TimeOffRequestApprove, curre
     request.updated_at = datetime.now()
     db.commit()
     
-    # 发送个人推送通知给申请人
+    # 发送企业微信推送通知给申请人
     type_names = {"U":"调休","B":"病假","S":"事假","H":"婚假","C":"产假","L":"护理假","J":"经期假","Y":"孕期假","R":"哺乳假","N":"年休假","T":"探亲假","Z":"丧假"}
     type_name = type_names.get(request.type, "调休")
     status_text = "已批准" if approve_data.approved else "已拒绝"
-    title = f"🏖️ {type_name}申请{status_text}"
+    title = f"{type_name}申请{status_text}"
     content = f"您的{type_name}申请{status_text}\n日期：{request.date}\n时长：{request.hours}小时"
     link_url = f"http://x.dysobo.cn:8888/kq/?page=timeoff"
-    send_personal_push(request.user_id, title, content, link_url, db)
+    send_wechat_message(request.user_id, title, content, link_url, db)
     
     return {"message": "申请已" + ("批准" if approve_data.approved else "拒绝")}
 
@@ -710,12 +816,12 @@ def approve_overtime(record_id: int, approve_data: OvertimeRecordApprove, curren
     record.approved_by = current_user.id
     db.commit()
     
-    # 发送个人推送通知给申请人
+    # 发送企业微信推送通知给申请人
     status_text = "已确认" if approve_data.approved else "已拒绝"
-    title = f"⏰ 加班记录{status_text}"
+    title = f"加班记录{status_text}"
     content = f"您的加班记录{status_text}\n日期：{record.date}\n时长：{record.hours}小时"
     link_url = f"http://x.dysobo.cn:8888/kq/?page=overtime"
-    send_personal_push(record.user_id, title, content, link_url, db)
+    send_wechat_message(record.user_id, title, content, link_url, db)
     
     return {"message": "加班记录已" + ("批准" if approve_data.approved else "拒绝")}
 
