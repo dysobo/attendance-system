@@ -265,7 +265,7 @@ def get_team_shifts(db: Session = Depends(database.get_db)):
             "phone": user.phone if hasattr(user, 'phone') and user.phone else "-",  # 联系方式
             "date": str(s.date),
             "shift_type": s.shift_type,
-            "note": s.note
+            "note": s.note if s.note else "-"  # 备注
         })
     return result
 
