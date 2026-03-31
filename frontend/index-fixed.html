@@ -1033,14 +1033,20 @@
                 // 导出功能
                 const exportMonthlyStats = async () => {
                     try {
-                        const response = await fetch(`/api/export/monthly?month=${exportMonth.value}&year=${exportYear.value}`, {
+                        const token = localStorage.getItem('token');
+                        const response = await fetch('/kq/api/export/monthly?month=' + exportMonth.value + '&year=' + exportYear.value, {
                             headers: {
-                                'Authorization': `Bearer ${localStorage.getItem('token')}`
+                                'Authorization': 'Bearer ' + token
                             }
                         });
                         
+                        const contentType = response.headers.get('content-type');
+                        if (contentType && contentType.includes('text/html')) {
+                            throw new Error('认证失败，请重新登录');
+                        }
+                        
                         if (!response.ok) {
-                            const err = await response.json();
+                            const err = await response.json().catch(() => ({ detail: '导出失败' }));
                             throw new Error(err.detail || '导出失败');
                         }
                         
@@ -1048,7 +1054,7 @@
                         const blob = new Blob([result.data], { type: 'text/csv;charset=utf-8;' });
                         const link = document.createElement('a');
                         link.href = URL.createObjectURL(blob);
-                        link.download = result.filename || `考勤统计_${exportYear.value}年${exportMonth.value}月.csv`;
+                        link.download = result.filename || '考勤统计_' + exportYear.value + '年' + exportMonth.value + '月.csv';
                         link.click();
                         alert('✅ 导出成功');
                     } catch (e) {
