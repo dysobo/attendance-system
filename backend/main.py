@@ -458,12 +458,17 @@ def update_time_off(request_id: int, update_data: TimeOffRequestCreate, current_
 
 @app.delete("/api/time-off/{request_id}")
 def delete_time_off(request_id: int, current_user: database.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="需要管理员权限")
-    
     request = db.query(database.TimeOffRequest).filter(database.TimeOffRequest.id == request_id).first()
     if not request:
         raise HTTPException(status_code=404, detail="申请不存在")
+    
+    # 权限检查：管理员或本人可删除
+    if current_user.role != "admin" and request.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="无权限删除")
+    
+    # 状态检查：只有 pending 状态可删除
+    if request.status != "pending":
+        raise HTTPException(status_code=400, detail="已审批，不可删除")
     
     db.delete(request)
     db.commit()
@@ -631,12 +636,17 @@ def update_overtime(record_id: int, update_data: OvertimeRecordCreate, current_u
 
 @app.delete("/api/overtime/{record_id}")
 def delete_overtime(record_id: int, current_user: database.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="需要管理员权限")
-    
     record = db.query(database.OvertimeRecord).filter(database.OvertimeRecord.id == record_id).first()
     if not record:
         raise HTTPException(status_code=404, detail="记录不存在")
+    
+    # 权限检查：管理员或本人可删除
+    if current_user.role != "admin" and record.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="无权限删除")
+    
+    # 状态检查：只有 pending 状态可删除
+    if record.status != "pending":
+        raise HTTPException(status_code=400, detail="已确认，不可删除")
     
     db.delete(record)
     db.commit()
