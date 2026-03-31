@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import JSONResponse
@@ -15,6 +15,10 @@ import json
 import json
 import io
 import csv
+import re
+import time
+import xml.etree.ElementTree as ET
+from hashlib import sha1
 
 # ==================== 配置 ====================
 
@@ -361,6 +365,212 @@ def test_wechat_push(data: dict, current_user: database.User = Depends(get_curre
         return {"message": "测试推送已发送"}
     else:
         raise HTTPException(status_code=500, detail="推送失败，请检查配置")
+
+# ==================== 企业微信回调接口 ====================
+
+def verify_wechat_signature(token: str, signature: str, timestamp: str, nonce: str) -> bool:
+    """验证企业微信签名"""
+    try:
+        sorted_list = sorted([token, timestamp, nonce])
+        hash_str = ''.join(sorted_list).encode('utf-8')
+        hash_str = sha1(hash_str).hexdigest()
+        return hash_str == signature
+    except Exception as e:
+        print(f"❌ 签名验证失败：{e}")
+        return False
+
+def decrypt_wechat_message(encoding_aes_key: str, encrypt: str) -> str:
+    """解密企业微信消息"""
+    # TODO: 实现 AES 解密
+    # 这里简化处理，实际需要使用 Crypto.Cipher.AES
+    return encrypt
+
+@app.get("/api/wechat/callback")
+def wechat_callback_get(
+    msg_signature: str = "",
+    timestamp: str = "",
+    nonce: str = "",
+    echostr: str = "",
+    db: Session = Depends(database.get_db)
+):
+    """企业微信 URL 验证（GET 请求）"""
+    config = db.query(database.WechatConfig).filter(database.WechatConfig.enabled == True).first()
+    
+    if not config or not config.token:
+        return echostr
+    
+    # 验证签名
+    if verify_wechat_signature(config.token, msg_signature, timestamp, nonce):
+        return echostr
+    else:
+        raise HTTPException(status_code=403, detail="签名验证失败")
+
+@app.post("/api/wechat/callback")
+async def wechat_callback_post(
+    request: Request,
+    msg_signature: str = "",
+    timestamp: str = "",
+    nonce: str = "",
+    db: Session = Depends(database.get_db)
+):
+    """接收企业微信消息（POST 请求）"""
+    config = db.query(database.WechatConfig).filter(database.WechatConfig.enabled == True).first()
+    
+    # 验证签名
+    if config and config.token:
+        if not verify_wechat_signature(config.token, msg_signature, timestamp, nonce):
+            raise HTTPException(status_code=403, detail="签名验证失败")
+    
+    # 读取请求体
+    body = await request.body()
+    body_str = body.decode('utf-8')
+    
+    # 解析 XML
+    try:
+        xml_root = ET.fromstring(body_str)
+        
+        # 获取消息类型
+        msg_type = xml_root.find('MsgType').text if xml_root.find('MsgType') is not None else ''
+        
+        # 只处理文本消息
+        if msg_type != 'text':
+            return "success"
+        
+        # 获取发送者
+        from_user = xml_root.find('FromUserName').text if xml_root.find('FromUserName') is not None else ''
+        
+        # 获取消息内容
+        content = xml_root.find('Content').text if xml_root.find('Content') is not None else ''
+        
+        # 处理指令
+        response = process_wechat_command(from_user, content, db)
+        
+        # 返回响应（简化处理，实际需要加密）
+        # TODO: 实现响应加密
+        print(f"✅ 处理指令：{from_user} - {content} → {response}")
+        
+        return "success"
+        
+    except Exception as e:
+        print(f"❌ 解析消息失败：{e}")
+        return "success"  # 返回 success 避免企业微信重试
+
+def process_wechat_command(user_wechat_id: str, command: str, db: Session):
+    """处理企业微信指令"""
+    # 根据企业微信 ID 查找用户
+    user = db.query(database.User).filter(database.User.wechat_user_id == user_wechat_id).first()
+    if not user:
+        return "❌ 未找到绑定用户，请先在考勤系统中绑定企业微信 ID"
+    
+    command = command.strip().lower()
+    
+    # 指令：记加班 Xh
+    match = re.match(r'记加班\s*(\d+(?:\.\d+)?)\s*h?', command)
+    if match:
+        hours = float(match.group(1))
+        return create_overtime_command(user, hours, db)
+    
+    # 指令：查加班
+    if command in ['查加班', '加班', 'query overtime']:
+        return query_overtime_command(user, db)
+    
+    # 指令：查调休
+    if command in ['查调休', '调休', 'query leave']:
+        return query_leave_command(user, db)
+    
+    # 指令：帮助
+    if command in ['帮助', 'help', '指令']:
+        return get_help_command()
+    
+    return "❌ 未知指令，发送【帮助】查看可用指令"
+
+def create_overtime_command(user: database.User, hours: float, db: Session) -> str:
+    """记加班指令"""
+    from datetime import date
+    
+    # 创建加班记录
+    record = database.OvertimeRecord(
+        user_id=user.id,
+        date=date.today(),
+        hours=hours,
+        reason="企业微信指令",
+        status="pending"
+    )
+    db.add(record)
+    db.commit()
+    
+    # 发送通知给管理员
+    admins = db.query(database.User).filter(database.User.role == "admin").all()
+    for admin in admins:
+        send_wechat_message(
+            admin.id,
+            f"加班申请 - {user.name}",
+            f"{user.name} 申请加班\n日期：{date.today()}\n时长：{hours}小时\n\n请点击审批",
+            "http://x.dysobo.cn:8888/kq/?page=overtime",
+            db
+        )
+    
+    return f"✅ 已提交加班申请：今日加班 {hours} 小时\n请等待管理员确认"
+
+def query_overtime_command(user: database.User, db: Session) -> str:
+    """查询加班指令"""
+    from datetime import date, timedelta
+    
+    # 本月起止日期
+    today = date.today()
+    month_start = date(today.year, today.month, 1)
+    month_end = date(today.year, today.month + 1, 1) if today.month < 12 else date(today.year + 1, 1, 1)
+    
+    # 查询本月加班
+    records = db.query(database.OvertimeRecord).filter(
+        database.OvertimeRecord.user_id == user.id,
+        database.OvertimeRecord.date >= month_start,
+        database.OvertimeRecord.date < month_end,
+        database.OvertimeRecord.status == "approved"
+    ).all()
+    
+    total_hours = sum(r.hours for r in records)
+    
+    return f"📊 本月加班统计\n累计：{total_hours} 小时\n笔数：{len(records)} 笔"
+
+def query_leave_command(user: database.User, db: Session) -> str:
+    """查询调休指令"""
+    from datetime import date
+    
+    # 本月起止日期
+    today = date.today()
+    month_start = date(today.year, today.month, 1)
+    month_end = date(today.year, today.month + 1, 1) if today.month < 12 else date(today.year + 1, 1, 1)
+    
+    # 查询本月调休
+    records = db.query(database.TimeOffRequest).filter(
+        database.TimeOffRequest.user_id == user.id,
+        database.TimeOffRequest.date >= month_start,
+        database.TimeOffRequest.date < month_end,
+        database.TimeOffRequest.status == "approved"
+    ).all()
+    
+    total_hours = sum(r.hours for r in records)
+    
+    return f"📊 本月调休统计\n累计：{total_hours} 小时\n笔数：{len(records)} 笔"
+
+def get_help_command() -> str:
+    """帮助指令"""
+    return """📖 可用指令：
+
+🕐 加班相关：
+  记加班 Xh - 记录当日加班 X 小时
+  查加班 - 查询本月加班统计
+
+🏖️ 调休相关：
+  查调休 - 查询本月调休统计
+
+❓ 其他：
+  帮助 - 显示此帮助信息
+
+示例：
+  记加班 3h
+  查加班"""
 
 # ==================== 企业微信推送函数 ====================
 
