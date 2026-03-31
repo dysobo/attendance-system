@@ -48,6 +48,7 @@ class UserCreate(BaseModel):
     name: str
     password: str
     role: str = "member"
+    phone: Optional[str] = None
 
 class ShiftCreate(BaseModel):
     user_id: int
@@ -167,17 +168,18 @@ def create_user(user_data: UserCreate, current_user: database.User = Depends(get
     user = database.User(
         name=user_data.name,
         password=get_password_hash(user_data.password),
-        role=user_data.role
+        role=user_data.role,
+        phone=user_data.phone if hasattr(user_data, 'phone') else None
     )
     db.add(user)
     db.commit()
     db.refresh(user)
-    return {"id": user.id, "name": user.name, "role": user.role}
+    return {"id": user.id, "name": user.name, "role": user.role, "phone": user.phone}
 
 @app.get("/api/users")
 def list_users(current_user: database.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
     users = db.query(database.User).all()
-    return [{"id": u.id, "name": u.name, "role": u.role} for u in users]
+    return [{"id": u.id, "name": u.name, "role": u.role, "phone": u.phone} for u in users]
 
 @app.post("/api/users/{user_id}/reset-password")
 def reset_password(user_id: int, password_data: dict, current_user: database.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
