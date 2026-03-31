@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, List
@@ -12,6 +13,8 @@ import hashlib
 import requests
 import json
 import json
+import io
+import csv
 
 # ==================== 配置 ====================
 
@@ -736,6 +739,223 @@ def get_my_summary(current_user: database.User = Depends(get_current_user), db: 
         "overtime_hours": total_overtime_hours,
         "overtime_pending": pending_overtime
     }
+
+# ==================== 数据导出与备份 ====================
+
+@app.get("/api/export/monthly")
+def export_monthly_stats(month: Optional[int] = None, year: Optional[int] = None, current_user: database.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
+    """导出当月统计数据（CSV 格式）"""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+    
+    from datetime import timedelta
+    # 默认当前月份
+    if not month or not year:
+        today = date.today()
+        month = today.month
+        year = today.year
+    
+    # 计算月份起止日期
+    month_start = date(year, month, 1)
+    if month == 12:
+        month_end = date(year + 1, 1, 1)
+    else:
+        month_end = date(year, month + 1, 1)
+    
+    # 获取所有用户
+    users = db.query(database.User).filter(database.User.role == "member").all()
+    
+    # 准备 CSV 数据
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # 写入表头
+    writer.writerow(['考勤统计报表', f'{year}年{month}月'])
+    writer.writerow([])
+    
+    # 调休汇总
+    writer.writerow(['=== 调休汇总 ==='])
+    writer.writerow(['姓名', '已批准调休 (小时)', '待审批调休 (小时)', '调休次数'])
+    for user in users:
+        approved = db.query(database.TimeOffRequest).filter(
+            database.TimeOffRequest.user_id == user.id,
+            database.TimeOffRequest.status == "approved",
+            database.TimeOffRequest.date >= month_start,
+            database.TimeOffRequest.date < month_end
+        ).all()
+        pending = db.query(database.TimeOffRequest).filter(
+            database.TimeOffRequest.user_id == user.id,
+            database.TimeOffRequest.status == "pending",
+            database.TimeOffRequest.date >= month_start,
+            database.TimeOffRequest.date < month_end
+        ).all()
+        approved_hours = sum(r.hours for r in approved)
+        pending_hours = sum(r.hours for r in pending)
+        writer.writerow([user.name, approved_hours, pending_hours, len(approved)])
+    writer.writerow([])
+    
+    # 加班汇总
+    writer.writerow(['=== 加班汇总 ==='])
+    writer.writerow(['姓名', '已确认加班 (小时)', '待确认加班 (小时)', '加班次数'])
+    for user in users:
+        approved = db.query(database.OvertimeRecord).filter(
+            database.OvertimeRecord.user_id == user.id,
+            database.OvertimeRecord.status == "approved",
+            database.OvertimeRecord.date >= month_start,
+            database.OvertimeRecord.date < month_end
+        ).all()
+        pending = db.query(database.OvertimeRecord).filter(
+            database.OvertimeRecord.user_id == user.id,
+            database.OvertimeRecord.status == "pending",
+            database.OvertimeRecord.date >= month_start,
+            database.OvertimeRecord.date < month_end
+        ).all()
+        approved_hours = sum(r.hours for r in approved)
+        pending_hours = sum(r.hours for r in pending)
+        writer.writerow([user.name, approved_hours, pending_hours, len(approved)])
+    writer.writerow([])
+    
+    # 出勤率统计
+    writer.writerow(['=== 出勤统计 ==='])
+    writer.writerow(['姓名', '应出勤天数', '实际出勤天数', '出勤率'])
+    for user in users:
+        # 计算当月工作日（简单计算：总天数 - 周末）
+        import calendar
+        _, days_in_month = calendar.monthrange(year, month)
+        work_days = sum(1 for d in range(1, days_in_month + 1) 
+                       if date(year, month, d).weekday() < 5)
+        
+        # 实际出勤天数（有排班的天数）
+        actual_shifts = db.query(database.Shift).filter(
+            database.Shift.user_id == user.id,
+            database.Shift.date >= month_start,
+            database.Shift.date < month_end,
+            database.Shift.shift_type != "休息"
+        ).count()
+        
+        attendance_rate = f"{actual_shifts / work_days * 100:.1f}%" if work_days > 0 else "0%"
+        writer.writerow([user.name, work_days, actual_shifts, attendance_rate])
+    
+    csv_content = output.getvalue()
+    
+    return JSONResponse(
+        content={"filename": f"考勤统计_{year}年{month}月.csv", "data": csv_content},
+        headers={"Content-Disposition": f"attachment; filename=考勤统计_{year}年{month}月.csv"}
+    )
+
+@app.get("/api/backup/export")
+def export_backup(current_user: database.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
+    """导出所有数据备份（JSON 格式）"""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+    
+    # 导出所有表数据
+    users = db.query(database.User).all()
+    shifts = db.query(database.Shift).all()
+    time_off = db.query(database.TimeOffRequest).all()
+    overtime = db.query(database.OvertimeRecord).all()
+    
+    backup_data = {
+        "export_time": datetime.now().isoformat(),
+        "version": "1.0",
+        "users": [
+            {
+                "id": u.id, "name": u.name, "role": u.role, 
+                "phone": u.phone, "created_at": str(u.created_at)
+            } for u in users
+        ],
+        "shifts": [
+            {
+                "id": s.id, "user_id": s.user_id, "date": str(s.date),
+                "shift_type": s.shift_type, "note": s.note, "created_at": str(s.created_at)
+            } for s in shifts
+        ],
+        "time_off_requests": [
+            {
+                "id": t.id, "user_id": t.user_id, "date": str(t.date),
+                "hours": t.hours, "reason": t.reason, "status": t.status,
+                "approved_by": t.approved_by, "created_at": str(t.created_at)
+            } for t in time_off
+        ],
+        "overtime_records": [
+            {
+                "id": o.id, "user_id": o.user_id, "date": str(o.date),
+                "hours": o.hours, "reason": o.reason, "status": o.status,
+                "approved_by": o.approved_by, "created_at": str(o.created_at)
+            } for o in overtime
+        ]
+    }
+    
+    return {"filename": f"考勤备份_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json", "data": backup_data}
+
+@app.post("/api/backup/import")
+def import_backup(backup_data: dict, current_user: database.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
+    """从备份文件恢复数据"""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+    
+    try:
+        # 验证备份数据格式
+        if "users" not in backup_data:
+            raise HTTPException(status_code=400, detail="无效的备份文件格式")
+        
+        # 清空现有数据（谨慎操作）
+        db.query(database.OvertimeRecord).delete()
+        db.query(database.TimeOffRequest).delete()
+        db.query(database.Shift).delete()
+        db.query(database.User).delete()
+        db.commit()
+        
+        # 恢复用户数据（排除 admin 用户）
+        admin_user = db.query(database.User).filter(database.User.role == "admin").first()
+        
+        for u in backup_data.get("users", []):
+            if u["role"] == "admin" and admin_user:
+                continue  # 跳过 admin 用户
+            user = database.User(
+                id=u["id"], name=u["name"], role=u["role"],
+                phone=u.get("phone"), password=admin_user.password if admin_user else get_password_hash("123456")
+            )
+            db.add(user)
+        
+        # 恢复排班数据
+        for s in backup_data.get("shifts", []):
+            shift = database.Shift(
+                id=s["id"], user_id=s["user_id"], date=s["date"],
+                shift_type=s["shift_type"], note=s.get("note")
+            )
+            db.add(shift)
+        
+        # 恢复调休数据
+        for t in backup_data.get("time_off_requests", []):
+            time_off = database.TimeOffRequest(
+                id=t["id"], user_id=t["user_id"], date=t["date"],
+                hours=t["hours"], reason=t.get("reason"), status=t["status"],
+                approved_by=t.get("approved_by")
+            )
+            db.add(time_off)
+        
+        # 恢复加班数据
+        for o in backup_data.get("overtime_records", []):
+            overtime = database.OvertimeRecord(
+                id=o["id"], user_id=o["user_id"], date=o["date"],
+                hours=o["hours"], reason=o.get("reason"), status=o["status"],
+                approved_by=o.get("approved_by")
+            )
+            db.add(overtime)
+        
+        db.commit()
+        
+        return {"message": "数据恢复成功", "count": {
+            "users": len(backup_data.get("users", [])),
+            "shifts": len(backup_data.get("shifts", [])),
+            "time_off": len(backup_data.get("time_off_requests", [])),
+            "overtime": len(backup_data.get("overtime_records", []))
+        }}
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"恢复失败：{str(e)}")
 
 if __name__ == "__main__":
     import uvicorn

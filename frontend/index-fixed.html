@@ -251,6 +251,7 @@
                 <div class="menu-item" :class="{active: currentPage==='overtime'}" @click="currentPage='overtime';menuOpen=false">⏰ 加班记录</div>
                 <div class="menu-item" v-if="currentUser.role==='admin'" :class="{active: currentPage==='users'}" @click="currentPage='users';menuOpen=false">👥 用户管理</div>
                 <div class="menu-item" v-if="currentUser.role==='admin'" :class="{active: currentPage==='webhook'}" @click="currentPage='webhook';menuOpen=false">🔔 消息推送</div>
+                <div class="menu-item" v-if="currentUser.role==='admin'" :class="{active: currentPage==='export'}" @click="currentPage='export';menuOpen=false">📊 数据导出</div>
                 <div class="menu-item" :class="{active: currentPage==='password'}" @click="currentPage='password';menuOpen=false">🔑 修改密码</div>
                 <div class="menu-item" @click="handleLogout" style="margin-top:auto;border-top:1px solid rgba(255,255,255,0.1)">🚪 退出登录</div>
             </div>
@@ -539,6 +540,45 @@
                         </el-form>
                     </div>
                     
+                    <!-- 数据导出 -->
+                    <div v-show="currentPage === 'export' && currentUser.role==='admin'">
+                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px">
+                            <!-- 当月统计导出 -->
+                            <div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 2px 12px rgba(0,0,0,0.1)">
+                                <h3 style="margin-bottom:15px;color:#667eea">📊 当月统计导出</h3>
+                                <p style="color:#666;font-size:13px;margin-bottom:15px">导出当月调休、加班、出勤率统计报表（CSV 格式）</p>
+                                <div style="display:flex;gap:10px;margin-bottom:15px">
+                                    <el-select v-model="exportMonth" placeholder="月份" style="width:100px">
+                                        <el-option v-for="m in 12" :key="m" :label="m+'月'" :value="m"></el-option>
+                                    </el-select>
+                                    <el-select v-model="exportYear" placeholder="年份" style="width:100px">
+                                        <el-option v-for="y in [2025,2026,2027,2028]" :key="y" :label="y" :value="y"></el-option>
+                                    </el-select>
+                                </div>
+                                <el-button type="primary" @click="exportMonthlyStats" style="width:100%">📥 导出 CSV</el-button>
+                            </div>
+                            
+                            <!-- 数据备份 -->
+                            <div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 2px 12px rgba(0,0,0,0.1)">
+                                <h3 style="margin-bottom:15px;color:#f5576c">💾 数据备份</h3>
+                                <p style="color:#666;font-size:13px;margin-bottom:15px">备份所有数据（用户、排班、调休、加班）为 JSON 文件</p>
+                                <el-button type="primary" @click="exportBackup" style="width:100%;margin-bottom:10px">📤 导出备份</el-button>
+                                <el-button type="warning" @click="$refs.importFile.click()" style="width:100%">📥 导入恢复</el-button>
+                                <input type="file" ref="importFile" accept=".json" style="display:none" @change="importBackup">
+                            </div>
+                        </div>
+                        
+                        <!-- 使用说明 -->
+                        <div style="margin-top:20px;background:#fff;border-radius:12px;padding:20px;box-shadow:0 2px 12px rgba(0,0,0,0.1)">
+                            <h4 style="margin-bottom:10px;color:#333">📖 使用说明</h4>
+                            <ul style="color:#666;font-size:13px;line-height:2">
+                                <li><strong>当月统计导出：</strong>生成 CSV 格式的月度报表，包含调休汇总、加班汇总、出勤率统计</li>
+                                <li><strong>数据备份：</strong>导出所有数据为 JSON 文件，建议定期备份</li>
+                                <li><strong>数据恢复：</strong>从备份文件恢复数据，<strong style="color:red">注意：会清空现有数据！</strong></li>
+                            </ul>
+                        </div>
+                    </div>
+                    
                     <!-- 修改密码 -->
                     <div v-show="currentPage === 'password'">
                         <el-form :model="passwordForm" label-width="80px" style="max-width:400px">
@@ -645,7 +685,7 @@
     </div>
     
     <!-- 版本号 -->
-    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V1.6.1</a>
+    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V1.7.0</a>
     
     <script>
         const API_BASE = '/kq/api';
@@ -664,6 +704,9 @@
                 const myStats = ref({});
                 const webhookForm = ref({ enabled: false, url: '', route_id: '', notify_time_off: true, notify_overtime: true });
                 const passwordForm = ref({ oldPassword: '', newPassword: '', confirmPassword: '' });
+                const exportMonth = ref(new Date().getMonth() + 1);
+                const exportYear = ref(new Date().getFullYear());
+                const importFile = ref(null);
                 const showShiftDialog = ref(false);
                 const showTimeoffDialog = ref(false);
                 const showOvertimeDialog = ref(false);
@@ -987,6 +1030,64 @@
                 const saveWebhookConfig = async () => { await api('/webhook/config', { method: 'POST', body: JSON.stringify(webhookForm.value) }); alert('配置已保存'); };
                 const testWebhook = async () => { await api('/webhook/test', { method: 'POST', body: JSON.stringify({ title: '测试', content: '测试消息' }) }); alert('测试推送已发送'); };
                 
+                // 导出功能
+                const exportMonthlyStats = async () => {
+                    try {
+                        const response = await api(`/export/monthly?month=${exportMonth.value}&year=${exportYear.value}`);
+                        const blob = new Blob([response.data], { type: 'text/csv;charset=utf-8;' });
+                        const link = document.createElement('a');
+                        link.href = URL.createObjectURL(blob);
+                        link.download = response.filename || `考勤统计_${exportYear.value}年${exportMonth.value}月.csv`;
+                        link.click();
+                        alert('✅ 导出成功');
+                    } catch (e) {
+                        alert('❌ 导出失败：' + e.message);
+                    }
+                };
+                
+                const exportBackup = async () => {
+                    try {
+                        const response = await api('/backup/export');
+                        const blob = new Blob([JSON.stringify(response.data, null, 2)], { type: 'application/json' });
+                        const link = document.createElement('a');
+                        link.href = URL.createObjectURL(blob);
+                        link.download = response.filename || `考勤备份_${new Date().toISOString().slice(0,10)}.json`;
+                        link.click();
+                        alert('✅ 备份成功');
+                    } catch (e) {
+                        alert('❌ 备份失败：' + e.message);
+                    }
+                };
+                
+                const importBackup = async (event) => {
+                    const file = event.target.files[0];
+                    if (!file) return;
+                    
+                    if (!confirm('⚠️ 警告：导入操作会清空现有数据！确定要继续吗？')) {
+                        event.target.value = '';
+                        return;
+                    }
+                    
+                    try {
+                        const reader = new FileReader();
+                        reader.onload = async (e) => {
+                            try {
+                                const backupData = JSON.parse(e.target.result);
+                                const result = await api('/backup/import', { method: 'POST', body: JSON.stringify(backupData) });
+                                alert('✅ 恢复成功！\\n' + JSON.stringify(result.count, null, 2));
+                                await loadData();
+                            } catch (err) {
+                                alert('❌ 恢复失败：' + err.message);
+                            }
+                        };
+                        reader.readAsText(file);
+                    } catch (e) {
+                        alert('❌ 读取文件失败：' + e.message);
+                    } finally {
+                        event.target.value = '';
+                    }
+                };
+                
                 const changePassword = async () => { await api('/auth/change-password', { method: 'POST', body: JSON.stringify(passwordForm.value) }); alert('密码修改成功'); };
                 
                 const loadUserInfo = async () => {
@@ -1008,7 +1109,7 @@
                     }
                 });
                 
-                return { currentUser, currentPage, menuOpen, loginForm, users, shifts, timeoffList, overtimeList, myStats, webhookForm, passwordForm, showShiftDialog, showTimeoffDialog, showOvertimeDialog, showUserDialog, shiftForm, timeoffForm, overtimeForm, userForm, pageTitle, recentShifts, myShifts, teamShifts, months, monthLabels, monthWidths, weekData, tooltip, handleLogin, handleLogout, loadData, loadUserInfo, openShiftDialog, saveShift, confirmDeleteShift, saveTimeoff, saveOvertime, saveUser, approveTimeoff, approveOvertime, openEditTimeoff, openEditOvertime, openEditUser, confirmDeleteTimeoff, confirmDeleteOvertime, confirmDeleteUser, toggleUserRole, openResetPassword, saveWebhookConfig, testWebhook, changePassword, getCellClass, showTooltip, hideTooltip };
+                return { currentUser, currentPage, menuOpen, loginForm, users, shifts, timeoffList, overtimeList, myStats, webhookForm, passwordForm, exportMonth, exportYear, importFile, showShiftDialog, showTimeoffDialog, showOvertimeDialog, showUserDialog, shiftForm, timeoffForm, overtimeForm, userForm, pageTitle, recentShifts, myShifts, teamShifts, months, monthLabels, monthWidths, weekData, tooltip, handleLogin, handleLogout, loadData, loadUserInfo, openShiftDialog, saveShift, confirmDeleteShift, saveTimeoff, saveOvertime, saveUser, approveTimeoff, approveOvertime, openEditTimeoff, openEditOvertime, openEditUser, confirmDeleteTimeoff, confirmDeleteOvertime, confirmDeleteUser, toggleUserRole, openResetPassword, saveWebhookConfig, testWebhook, exportMonthlyStats, exportBackup, importBackup, changePassword, getCellClass, showTooltip, hideTooltip };
             }
         }).use(ElementPlus).mount('#app');
     </script>
