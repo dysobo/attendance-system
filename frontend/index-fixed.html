@@ -293,7 +293,12 @@
                             <el-table :data="recentShifts" stripe>
                                 <el-table-column prop="date" label="日期" width="100"></el-table-column>
                                 <el-table-column prop="user_name" label="姓名" width="80"></el-table-column>
-                                <el-table-column prop="shift_type" label="班次" width="80"></el-table-column>
+                                <el-table-column prop="shift_type" label="班次" width="80">
+                                    <template #default="scope">
+                                        <el-tag :type="scope.row.shift_type==='早班'?'success':scope.row.shift_type==='晚班'?'warning':'info'" size="small">{{ scope.row.shift_type }}</el-tag>
+                                    </template>
+                                </el-table-column>
+                                <el-table-column prop="phone" label="联系方式" width="120"></el-table-column>
                                 <el-table-column prop="note" label="备注"></el-table-column>
                             </el-table>
                         </div>
@@ -702,7 +707,7 @@
     </div>
     
     <!-- 版本号 -->
-    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V1.8.1</a>
+    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V1.8.2</a>
     
     <script>
         const API_BASE = '/kq/api';

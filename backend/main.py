@@ -289,7 +289,7 @@ def get_team_shifts(db: Session = Depends(database.get_db)):
             "id": s.id,
             "user_id": s.user_id,
             "user_name": user.name if user else "未知",
-            "phone": user.phone if hasattr(user, 'phone') and user.phone else "-",  # 联系方式
+            "phone": user.phone if user and user.phone else "-",  # 联系方式
             "date": str(s.date),
             "shift_type": s.shift_type,
             "note": s.note if s.note else "-"  # 备注
@@ -314,6 +314,7 @@ def list_shifts(start_date: Optional[date] = None, end_date: Optional[date] = No
             "id": s.id,
             "user_id": s.user_id,
             "user_name": user.name if user else "未知",
+            "phone": user.phone if user and user.phone else "-",
             "date": str(s.date),
             "shift_type": s.shift_type,
             "note": s.note
