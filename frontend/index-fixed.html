@@ -164,10 +164,19 @@
         .cell-leave-2 { background-color: #ffe066; }
         .cell-leave-3 { background-color: #ffc107; }
         .cell-leave-4 { background-color: #ff9800; }
-        .cell-both-1 { background-color: #b39ddb; }  /* 紫色：混合类型 */
-        .cell-both-2 { background-color: #9575cd; }
-        .cell-both-3 { background-color: #7e57c2; }
-        .cell-both-4 { background-color: #673ab7; }
+        /* 混合类型 - 45°斜对角分割 */
+        .cell-both-1 { 
+            background: linear-gradient(135deg, #9be9a8 50%, #fff4b8 50%);
+        }
+        .cell-both-2 { 
+            background: linear-gradient(135deg, #40c463 50%, #ffe066 50%);
+        }
+        .cell-both-3 { 
+            background: linear-gradient(135deg, #30a14e 50%, #ffc107 50%);
+        }
+        .cell-both-4 { 
+            background: linear-gradient(135deg, #216e39 50%, #ff9800 50%);
+        }
         .heatmap-tooltip {
             position: fixed;
             background: #fff;
@@ -689,7 +698,7 @@
     </div>
     
     <!-- 版本号 -->
-    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V1.7.3</a>
+    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V1.7.4</a>
     
     <script>
         const API_BASE = '/kq/api';
