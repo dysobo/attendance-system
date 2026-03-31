@@ -241,6 +241,28 @@ def update_user_role(user_id: int, role_data: dict, current_user: database.User 
     db.refresh(user)
     return {"message": "角色已更新", "role": user.role}
 
+@app.put("/api/users/{user_id}")
+def update_user(user_id: int, user_data: dict, current_user: database.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+    
+    user = db.query(database.User).filter(database.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    
+    # 更新用户信息
+    if "name" in user_data:
+        user.name = user_data["name"]
+    if "role" in user_data:
+        user.role = user_data["role"]
+    if "phone" in user_data:
+        user.phone = user_data["phone"]
+    # 密码只在创建时设置，编辑时不更新
+    
+    db.commit()
+    db.refresh(user)
+    return {"message": "用户信息已更新", "user": {"id": user.id, "name": user.name, "role": user.role, "phone": user.phone}}
+
 # --- 排班管理 ---
 
 @app.get("/api/shifts/team")

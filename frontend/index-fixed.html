@@ -503,8 +503,14 @@
                                         <el-tag :type="scope.row.role==='admin'?'danger':'primary'" size="small">{{ scope.row.role==='admin'?'管理员':'组员' }}</el-tag>
                                     </template>
                                 </el-table-column>
-                                <el-table-column label="操作" width="220">
+                                <el-table-column prop="phone" label="联系方式" width="150">
                                     <template #default="scope">
+                                        {{ scope.row.phone || '-' }}
+                                    </template>
+                                </el-table-column>
+                                <el-table-column label="操作" width="280">
+                                    <template #default="scope">
+                                        <el-button size="small" @click="openEditUser(scope.row)">编辑</el-button>
                                         <el-button size="small" @click="openResetPassword(scope.row)">重置密码</el-button>
                                         <el-button size="small" :type="scope.row.role==='admin'?'warning':'success'" @click="toggleUserRole(scope.row)">{{scope.row.role==='admin'?'取消管理':'设为管理'}}</el-button>
                                         <el-button size="small" type="danger" v-if="scope.row.id!==currentUser.id" @click="confirmDeleteUser(scope.row.id)">删除</el-button>
@@ -610,12 +616,12 @@
                     </el-dialog>
                     
                     <!-- 用户对话框 -->
-                    <el-dialog v-model="showUserDialog" title="添加用户" width="380px">
+                    <el-dialog v-model="showUserDialog" :title="editingUserId ? '编辑用户' : '添加用户'" width="380px">
                         <el-form :model="userForm" label-width="70px">
                             <el-form-item label="用户名">
                                 <el-input v-model="userForm.name" placeholder="请输入用户名"></el-input>
                             </el-form-item>
-                            <el-form-item label="密码">
+                            <el-form-item label="密码" v-if="!editingUserId">
                                 <el-input v-model="userForm.password" type="password" placeholder="请输入密码"></el-input>
                             </el-form-item>
                             <el-form-item label="角色">
@@ -639,7 +645,7 @@
     </div>
     
     <!-- 版本号 -->
-    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V1.5.5</a>
+    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V1.6.0</a>
     
     <script>
         const API_BASE = '/kq/api';
@@ -669,6 +675,13 @@
                 const editingShiftId = ref(null);
                 const editingTimeoffId = ref(null);
                 const editingOvertimeId = ref(null);
+                const editingUserId = ref(null);
+                
+                const openEditUser = (user) => {
+                    editingUserId.value = user.id;
+                    userForm.value = { name: user.name, password: '', role: user.role, phone: user.phone || '' };
+                    showUserDialog.value = true;
+                };
                 
                 const pageTitle = computed(() => ({ dashboard:'📊 仪表盘', shifts:'📅 排班管理', timeoff:'🏖️ 调休申请', overtime:'⏰ 加班记录', users:'👥 用户管理', webhook:'🔔 消息推送', password:'🔑 修改密码' })[currentPage.value] || '考勤管理');
                 
@@ -930,8 +943,15 @@
                 };
                 
                 const saveUser = async () => {
-                    await api('/users', { method: 'POST', body: JSON.stringify(userForm.value) });
+                    if (editingUserId.value) {
+                        // 编辑用户
+                        await api('/users/'+editingUserId.value, { method: 'PUT', body: JSON.stringify(userForm.value) });
+                    } else {
+                        // 添加用户
+                        await api('/users', { method: 'POST', body: JSON.stringify(userForm.value) });
+                    }
                     showUserDialog.value = false;
+                    editingUserId.value = null;
                     await loadData();
                 };
                 
