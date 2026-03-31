@@ -549,6 +549,11 @@
                                         {{ scope.row.phone || '-' }}
                                     </template>
                                 </el-table-column>
+                                <el-table-column prop="enable_push" label="推送" width="80">
+                                    <template #default="scope">
+                                        <el-tag :type="scope.row.enable_push?'success':'info'" size="small">{{ scope.row.enable_push?'已启用':'已禁用' }}</el-tag>
+                                    </template>
+                                </el-table-column>
                                 <el-table-column label="操作" width="280">
                                     <template #default="scope">
                                         <el-button size="small" @click="openEditUser(scope.row)">编辑</el-button>
@@ -713,7 +718,7 @@
                     
                     <!-- 用户对话框 -->
                     <el-dialog v-model="showUserDialog" :title="editingUserId ? '编辑用户' : '添加用户'" width="380px">
-                        <el-form :model="userForm" label-width="70px">
+                        <el-form :model="userForm" label-width="80px">
                             <el-form-item label="用户名">
                                 <el-input v-model="userForm.name" placeholder="请输入用户名"></el-input>
                             </el-form-item>
@@ -729,6 +734,12 @@
                             <el-form-item label="联系方式">
                                 <el-input v-model="userForm.phone" placeholder="请输入手机号（可选）"></el-input>
                             </el-form-item>
+                            <el-form-item label="企业微信 ID">
+                                <el-input v-model="userForm.wechat_user_id" placeholder="企业微信用户 ID（用于推送）"></el-input>
+                            </el-form-item>
+                            <el-form-item label="启用推送">
+                                <el-switch v-model="userForm.enable_push"></el-switch>
+                            </el-form-item>
                         </el-form>
                         <template #footer>
                             <el-button @click="showUserDialog=false">取消</el-button>
@@ -741,7 +752,7 @@
     </div>
     
     <!-- 版本号 -->
-    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V2.2.7</a>
+    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V3.0.0</a>
     
     <script>
         const API_BASE = '/kq/api';
@@ -770,7 +781,7 @@
                 const shiftForm = ref({ user_id: null, date: '', shift_type: '', note: '' });
                 const timeoffForm = ref({ date: '', hours: 4, type: 'U', reason: '' });
                 const overtimeForm = ref({ date: '', hours: 1, reason: '' });
-                const userForm = ref({ name: '', password: '', role: 'member', phone: '' });
+                const userForm = ref({ name: '', password: '', role: 'member', phone: '', wechat_user_id: '', enable_push: true });
                 const editingShiftId = ref(null);
                 const editingTimeoffId = ref(null);
                 const editingOvertimeId = ref(null);
@@ -778,7 +789,14 @@
                 
                 const openEditUser = (user) => {
                     editingUserId.value = user.id;
-                    userForm.value = { name: user.name, password: '', role: user.role, phone: user.phone || '' };
+                    userForm.value = { 
+                        name: user.name, 
+                        password: '', 
+                        role: user.role, 
+                        phone: user.phone || '',
+                        wechat_user_id: user.wechat_user_id || '',
+                        enable_push: user.enable_push !== false
+                    };
                     showUserDialog.value = true;
                 };
                 

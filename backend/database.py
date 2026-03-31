@@ -20,6 +20,8 @@ class User(Base):
     password = Column(String(100), nullable=False)
     role = Column(String(20), default="member")  # admin 或 member
     phone = Column(String(20), nullable=True)  # 联系方式
+    wechat_user_id = Column(String(100), nullable=True)  # 企业微信用户 ID（用于个人推送）
+    enable_push = Column(Boolean, default=True)  # 是否启用推送通知
     created_at = Column(DateTime, default=datetime.now)
 
 

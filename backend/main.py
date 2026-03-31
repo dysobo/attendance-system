@@ -263,11 +263,72 @@ def update_user(user_id: int, user_data: dict, current_user: database.User = Dep
         user.role = user_data["role"]
     if "phone" in user_data:
         user.phone = user_data["phone"]
+    if "wechat_user_id" in user_data:
+        user.wechat_user_id = user_data["wechat_user_id"]
+    if "enable_push" in user_data:
+        user.enable_push = user_data["enable_push"]
     # 密码只在创建时设置，编辑时不更新
     
     db.commit()
     db.refresh(user)
-    return {"message": "用户信息已更新", "user": {"id": user.id, "name": user.name, "role": user.role, "phone": user.phone}}
+    return {"message": "用户信息已更新", "user": {"id": user.id, "name": user.name, "role": user.role, "phone": user.phone, "wechat_user_id": user.wechat_user_id, "enable_push": user.enable_push}}
+
+# ==================== 企业微信绑定 ====================
+
+@app.get("/api/wechat/bind")
+def get_wechat_bind(current_user: database.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
+    """获取当前用户的企业微信绑定信息"""
+    return {
+        "wechat_user_id": current_user.wechat_user_id,
+        "enable_push": current_user.enable_push
+    }
+
+@app.post("/api/wechat/bind")
+def bind_wechat(data: dict, current_user: database.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
+    """绑定企业微信用户 ID"""
+    current_user.wechat_user_id = data.get("wechat_user_id", "")
+    current_user.enable_push = data.get("enable_push", True)
+    db.commit()
+    return {"message": "绑定成功", "wechat_user_id": current_user.wechat_user_id}
+
+# ==================== 个人推送功能 ====================
+
+def send_personal_push(user_id: int, title: str, content: str, link_url: str = "", db: Session = None):
+    """发送个人推送通知"""
+    if not db:
+        return False
+    
+    user = db.query(database.User).filter(database.User.id == user_id).first()
+    if not user or not user.enable_push or not user.wechat_user_id:
+        return False
+    
+    # 使用现有的 webhook 接口，但指定个人的 route_id
+    # 这里需要根据实际的企业微信 API 来调整
+    # 暂时使用通用 webhook 接口
+    webhook_config = load_webhook_config()
+    if webhook_config.get("enabled"):
+        payload = {
+            "route_id": webhook_config.get("route_id", ""),
+            "title": title,
+            "content": content,
+            "touser": user.wechat_user_id  # 指定接收人
+        }
+        if link_url:
+            payload["push_link_url"] = link_url
+        
+        try:
+            response = requests.post(webhook_config.get("url", ""), json=payload, headers={"Content-Type": "application/json"}, timeout=10)
+            if response.status_code == 200:
+                print(f"✅ 个人推送发送成功：{user.name} - {title}")
+                return True
+            else:
+                print(f"❌ 个人推送发送失败：{response.status_code}")
+                return False
+        except Exception as e:
+            print(f"❌ 个人推送发送异常：{e}")
+            return False
+    
+    return False
 
 # --- 排班管理 ---
 
@@ -395,6 +456,7 @@ def list_time_off(user_id: Optional[int] = None, status: Optional[str] = None, d
             "user_name": user.name if user else "未知",
             "date": str(r.date),
             "hours": r.hours,
+            "type": r.type,
             "reason": r.reason,
             "status": r.status,
             "created_at": str(r.created_at)
@@ -443,6 +505,16 @@ def approve_time_off(request_id: int, approve_data: TimeOffRequestApprove, curre
     request.approved_by = current_user.id
     request.updated_at = datetime.now()
     db.commit()
+    
+    # 发送个人推送通知给申请人
+    type_names = {"U":"调休","B":"病假","S":"事假","H":"婚假","C":"产假","L":"护理假","J":"经期假","Y":"孕期假","R":"哺乳假","N":"年休假","T":"探亲假","Z":"丧假"}
+    type_name = type_names.get(request.type, "调休")
+    status_text = "已批准" if approve_data.approved else "已拒绝"
+    title = f"🏖️ {type_name}申请{status_text}"
+    content = f"您的{type_name}申请{status_text}\n日期：{request.date}\n时长：{request.hours}小时"
+    link_url = f"http://x.dysobo.cn:8888/kq/?page=timeoff"
+    send_personal_push(request.user_id, title, content, link_url, db)
+    
     return {"message": "申请已" + ("批准" if approve_data.approved else "拒绝")}
 
 @app.put("/api/time-off/{request_id}")
@@ -469,13 +541,13 @@ def delete_time_off(request_id: int, current_user: database.User = Depends(get_c
     if not request:
         raise HTTPException(status_code=404, detail="申请不存在")
     
-    # 权限检查：管理员或本人可删除
-    if current_user.role != "admin" and request.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="无权限删除")
-    
-    # 状态检查：pending 或 rejected 状态可删除
-    if request.status not in ["pending", "rejected"]:
-        raise HTTPException(status_code=400, detail="已批准，不可删除")
+    # 权限检查：管理员可删除任何记录，本人只能删除 pending/rejected
+    if current_user.role != "admin":
+        if request.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="无权限删除")
+        # 本人只能删除 pending 或 rejected 状态
+        if request.status not in ["pending", "rejected"]:
+            raise HTTPException(status_code=400, detail="已批准，不可删除")
     
     db.delete(request)
     db.commit()
@@ -637,6 +709,14 @@ def approve_overtime(record_id: int, approve_data: OvertimeRecordApprove, curren
     record.status = "approved" if approve_data.approved else "rejected"
     record.approved_by = current_user.id
     db.commit()
+    
+    # 发送个人推送通知给申请人
+    status_text = "已确认" if approve_data.approved else "已拒绝"
+    title = f"⏰ 加班记录{status_text}"
+    content = f"您的加班记录{status_text}\n日期：{record.date}\n时长：{record.hours}小时"
+    link_url = f"http://x.dysobo.cn:8888/kq/?page=overtime"
+    send_personal_push(record.user_id, title, content, link_url, db)
+    
     return {"message": "加班记录已" + ("批准" if approve_data.approved else "拒绝")}
 
 @app.put("/api/overtime/{record_id}")
@@ -661,13 +741,13 @@ def delete_overtime(record_id: int, current_user: database.User = Depends(get_cu
     if not record:
         raise HTTPException(status_code=404, detail="记录不存在")
     
-    # 权限检查：管理员或本人可删除
-    if current_user.role != "admin" and record.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="无权限删除")
-    
-    # 状态检查：pending 或 rejected 状态可删除
-    if record.status not in ["pending", "rejected"]:
-        raise HTTPException(status_code=400, detail="已确认，不可删除")
+    # 权限检查：管理员可删除任何记录，本人只能删除 pending/rejected
+    if current_user.role != "admin":
+        if record.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="无权限删除")
+        # 本人只能删除 pending 或 rejected 状态
+        if record.status not in ["pending", "rejected"]:
+            raise HTTPException(status_code=400, detail="已确认，不可删除")
     
     db.delete(record)
     db.commit()
@@ -822,17 +902,21 @@ def export_monthly_stats(month: Optional[int] = None, year: Optional[int] = None
         
         # 按日期组织数据
         daily_data = {}
+        
+        # 处理假期记录（12 种类型）
         for t in time_off_records:
             day = t.date.day
             if day not in daily_data:
                 daily_data[day] = []
-            daily_data[day].append(f"U{t.hours}h")  # U = 调休
+            type_symbol = t.type if t.type else 'U'  # 默认为 U
+            daily_data[day].append(f"{type_symbol}{t.hours}")  # U/B/S/H/C/L/J/Y/R/N/T/Z = 各种假期
         
+        # 处理加班记录
         for o in overtime_records:
             day = o.date.day
             if day not in daily_data:
                 daily_data[day] = []
-            daily_data[day].append(f"▲{o.hours}h")  # ▲ = 加班
+            daily_data[day].append(f"▲{o.hours}")  # ▲ = 加班
         
         # 填充每天的记录
         for day in range(1, days_in_month + 1):
