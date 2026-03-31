@@ -476,7 +476,8 @@
                                     <div class="tooltip-date">{{ tooltip.date }}</div>
                                     <div v-if="tooltip.type" class="tooltip-detail">
                                         <div class="tooltip-dot" :style="{ backgroundColor: tooltip.color }"></div>
-                                        <span>{{ tooltip.typeText }} {{ tooltip.hours }}小时</span>
+                                        <span v-if="tooltip.typeText.includes('h')">{{ tooltip.typeText }}</span>
+                                        <span v-else>{{ tooltip.typeText }} {{ tooltip.hours }}小时</span>
                                     </div>
                                     <div v-if="tooltip.reason" class="tooltip-detail" style="margin-top:4px;color:#999">
                                         {{ tooltip.reason }}
@@ -701,7 +702,7 @@
     </div>
     
     <!-- 版本号 -->
-    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V1.7.9</a>
+    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V1.8.0</a>
     
     <script>
         const API_BASE = '/kq/api';
