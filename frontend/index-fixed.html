@@ -411,7 +411,7 @@
                                             <el-button size="small" type="danger" @click="confirmDeleteTimeoff(scope.row.id)">删除</el-button>
                                         </template>
                                         <!-- 本人操作：只有 pending 状态可删除 -->
-                                        <template v-else-if="scope.row.user_id === currentUser.id">
+                                        <template v-else-if="Number(scope.row.user_id) === Number(currentUser.id)">
                                             <el-button v-if="scope.row.status==='pending'" size="small" type="danger" @click="confirmDeleteTimeoff(scope.row.id)">撤销</el-button>
                                         </template>
                                     </template>
@@ -520,7 +520,7 @@
                                             <el-button size="small" type="danger" @click="confirmDeleteOvertime(scope.row.id)">删除</el-button>
                                         </template>
                                         <!-- 本人操作：只有 pending 状态可删除 -->
-                                        <template v-else-if="scope.row.user_id === currentUser.id">
+                                        <template v-else-if="Number(scope.row.user_id) === Number(currentUser.id)">
                                             <el-button v-if="scope.row.status==='pending'" size="small" type="danger" @click="confirmDeleteOvertime(scope.row.id)">撤销</el-button>
                                         </template>
                                     </template>
@@ -721,7 +721,7 @@
     </div>
     
     <!-- 版本号 -->
-    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V1.9.0</a>
+    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V1.9.1</a>
     
     <script>
         const API_BASE = '/kq/api';
