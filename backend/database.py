@@ -43,6 +43,7 @@ class TimeOffRequest(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     date = Column(Date, nullable=False, index=True)
     hours = Column(Float, default=8.0)  # 调休时长（小时）
+    type = Column(String(1), default="U")  # 假期类型：U 调休/B 病假/S 事假/H 婚假/C 产假/L 护理假/J 经期假/Y 孕期假/R 哺乳假/N 年休假/T 探亲假/Z 丧假
     reason = Column(Text)
     status = Column(String(20), default="pending")  # pending/approved/rejected
     approved_by = Column(Integer, ForeignKey("users.id"), nullable=True)

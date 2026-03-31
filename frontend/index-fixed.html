@@ -393,6 +393,11 @@
                         <div class="table-wrapper" style="margin-top:15px">
                             <el-table :data="timeoffList" stripe>
                                 <el-table-column prop="date" label="日期" width="100"></el-table-column>
+                                <el-table-column prop="type" label="类型" width="60">
+                                    <template #default="scope">
+                                        <el-tag size="small">{{ scope.row.type || 'U' }}</el-tag>
+                                    </template>
+                                </el-table-column>
                                 <el-table-column prop="hours" label="时长" width="60"></el-table-column>
                                 <el-table-column prop="user_name" label="申请人" width="80"></el-table-column>
                                 <el-table-column prop="reason" label="事由"></el-table-column>
@@ -659,6 +664,22 @@
                             <el-form-item label="日期">
                                 <el-date-picker v-model="timeoffForm.date" type="date" placeholder="选择日期" style="width:100%" value-format="YYYY-MM-DD"></el-date-picker>
                             </el-form-item>
+                            <el-form-item label="类型">
+                                <el-select v-model="timeoffForm.type" style="width:100%">
+                                    <el-option label="调休 U" value="U"></el-option>
+                                    <el-option label="病假 B" value="B"></el-option>
+                                    <el-option label="事假 S" value="S"></el-option>
+                                    <el-option label="婚假 H" value="H"></el-option>
+                                    <el-option label="产假 C" value="C"></el-option>
+                                    <el-option label="护理假 L" value="L"></el-option>
+                                    <el-option label="经期假 J" value="J"></el-option>
+                                    <el-option label="孕期假 Y" value="Y"></el-option>
+                                    <el-option label="哺乳假 R" value="R"></el-option>
+                                    <el-option label="年休假 N" value="N"></el-option>
+                                    <el-option label="探亲假 T" value="T"></el-option>
+                                    <el-option label="丧假 Z" value="Z"></el-option>
+                                </el-select>
+                            </el-form-item>
                             <el-form-item label="时长">
                                 <el-input-number v-model="timeoffForm.hours" :min="0.5" :max="24" :step="0.5" style="width:100%"></el-input-number>
                             </el-form-item>
@@ -721,7 +742,7 @@
     </div>
     
     <!-- 版本号 -->
-    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V2.1.0</a>
+    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V2.2.0</a>
     
     <script>
         const API_BASE = '/kq/api';
@@ -748,7 +769,7 @@
                 const showOvertimeDialog = ref(false);
                 const showUserDialog = ref(false);
                 const shiftForm = ref({ user_id: null, date: '', shift_type: '', note: '' });
-                const timeoffForm = ref({ date: '', hours: 4, reason: '' });
+                const timeoffForm = ref({ date: '', hours: 4, type: 'U', reason: '' });
                 const overtimeForm = ref({ date: '', hours: 1, reason: '' });
                 const userForm = ref({ name: '', password: '', role: 'member', phone: '' });
                 const editingShiftId = ref(null);
@@ -880,7 +901,7 @@
                         }
                     });
                     timeoffList.value.forEach(r => {
-                        if (r.status === 'approved') {
+                        if (r.status === 'approved' && (r.type === 'U' || !r.type)) {  // 只显示调休类型在热力图
                             // 如果当天已经有加班记录，标记为混合类型
                             if (allRecords[r.date]) {
                                 allRecords[r.date] = { 
@@ -1048,9 +1069,9 @@
                 const saveTimeoff = async () => {
                     const d = timeoffForm.value.date.split('T')[0];
                     if(editingTimeoffId.value) {
-                        await api('/time-off/'+editingTimeoffId.value, { method: 'PUT', body: JSON.stringify({ date: d, hours: timeoffForm.value.hours, reason: timeoffForm.value.reason }) });
+                        await api('/time-off/'+editingTimeoffId.value, { method: 'PUT', body: JSON.stringify({ date: d, hours: timeoffForm.value.hours, type: timeoffForm.value.type, reason: timeoffForm.value.reason }) });
                     } else {
-                        await api('/time-off', { method: 'POST', body: JSON.stringify({ date: d, hours: timeoffForm.value.hours, reason: timeoffForm.value.reason }) });
+                        await api('/time-off', { method: 'POST', body: JSON.stringify({ date: d, hours: timeoffForm.value.hours, type: timeoffForm.value.type, reason: timeoffForm.value.reason }) });
                     }
                     showTimeoffDialog.value = false;
                     await loadData();
@@ -1080,7 +1101,7 @@
                     await loadData();
                 };
                 
-                const openEditTimeoff = (row) => { editingTimeoffId.value = row.id; timeoffForm.value = { date: row.date, hours: row.hours, reason: row.reason }; showTimeoffDialog.value = true; };
+                const openEditTimeoff = (row) => { editingTimeoffId.value = row.id; timeoffForm.value = { date: row.date, hours: row.hours, type: row.type || 'U', reason: row.reason }; showTimeoffDialog.value = true; };
                 const openEditOvertime = (row) => { editingOvertimeId.value = row.id; overtimeForm.value = { date: row.date, hours: row.hours, reason: row.reason }; showOvertimeDialog.value = true; };
                 
                 const confirmDeleteTimeoff = async (id) => { if(confirm('确定删除？')) { await api('/time-off/'+id, { method: 'DELETE' }); await loadData(); } };

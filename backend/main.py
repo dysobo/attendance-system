@@ -66,6 +66,7 @@ class ShiftUpdate(BaseModel):
 class TimeOffRequestCreate(BaseModel):
     date: date
     hours: float = 8.0
+    type: str = "U"  # U 调休/B 病假/S 事假/H 婚假/C 产假/L 护理假/J 经期假/Y 孕期假/R 哺乳假/N 年休假/T 探亲假/Z 丧假
     reason: Optional[str] = None
 
 class WebhookConfig(BaseModel):
@@ -406,6 +407,7 @@ def create_time_off(request_data: TimeOffRequestCreate, current_user: database.U
         user_id=current_user.id,
         date=request_data.date,
         hours=request_data.hours,
+        type=request_data.type,
         reason=request_data.reason
     )
     db.add(request)
@@ -416,10 +418,12 @@ def create_time_off(request_data: TimeOffRequestCreate, current_user: database.U
     webhook_config = load_webhook_config()
     if webhook_config.get("enabled") and webhook_config.get("notify_time_off"):
         link_url = f"http://x.dysobo.cn:8888/kq/?page=timeoff&id={request.id}"
-        content = f"申请人：{current_user.name}\n日期：{request_data.date}\n时长：{request_data.hours}小时\n事由：{request_data.reason}\n\n👉 点击审批：{link_url}"
+        type_names = {"U":"调休","B":"病假","S":"事假","H":"婚假","C":"产假","L":"护理假","J":"经期假","Y":"孕期假","R":"哺乳假","N":"年休假","T":"探亲假","Z":"丧假"}
+        type_name = type_names.get(request_data.type, "调休")
+        content = f"申请人：{current_user.name}\n类型：{type_name}\n日期：{request_data.date}\n时长：{request_data.hours}小时\n事由：{request_data.reason}\n\n👉 点击审批：{link_url}"
         send_webhook(
             webhook_config,
-            "🏖️ 调休申请 - 待审批",
+            f"🏖️ {type_name}申请 - 待审批",
             content,
             link_url
         )
@@ -452,6 +456,7 @@ def update_time_off(request_id: int, update_data: TimeOffRequestCreate, current_
     
     request.date = update_data.date
     request.hours = update_data.hours
+    request.type = update_data.type
     request.reason = update_data.reason
     request.updated_at = datetime.now()
     db.commit()
