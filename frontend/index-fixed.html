@@ -742,7 +742,7 @@
     </div>
     
     <!-- 版本号 -->
-    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V2.2.0</a>
+    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V2.2.1</a>
     
     <script>
         const API_BASE = '/kq/api';
@@ -901,7 +901,7 @@
                         }
                     });
                     timeoffList.value.forEach(r => {
-                        if (r.status === 'approved' && (r.type === 'U' || !r.type)) {  // 只显示调休类型在热力图
+                        if (r.status === 'approved') {  // 所有假期类型都显示在热力图
                             // 如果当天已经有加班记录，标记为混合类型
                             if (allRecords[r.date]) {
                                 allRecords[r.date] = { 
@@ -985,13 +985,13 @@
                     let detailText = '';
                     
                     if (day.type === 'both') {
-                        typeText = '加班 + 调休';
-                        detailText = `加班 ${day.overtimeHours}h + 调休 ${day.leaveHours}h`;
+                        typeText = '加班 + 假期';
+                        detailText = `加班 ${day.overtimeHours}h + 假期 ${day.leaveHours}h`;
                     } else if (day.type === 'overtime') {
                         typeText = '加班';
                         detailText = `${day.hours}小时`;
                     } else if (day.type === 'leave') {
-                        typeText = '调休';
+                        typeText = '假期';
                         detailText = `${day.hours}小时`;
                     }
                     
