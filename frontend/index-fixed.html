@@ -164,6 +164,10 @@
         .cell-leave-2 { background-color: #ffe066; }
         .cell-leave-3 { background-color: #ffc107; }
         .cell-leave-4 { background-color: #ff9800; }
+        .cell-both-1 { background-color: #b39ddb; }  /* 紫色：混合类型 */
+        .cell-both-2 { background-color: #9575cd; }
+        .cell-both-3 { background-color: #7e57c2; }
+        .cell-both-4 { background-color: #673ab7; }
         .heatmap-tooltip {
             position: fixed;
             background: #fff;
@@ -685,7 +689,7 @@
     </div>
     
     <!-- 版本号 -->
-    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V1.7.0</a>
+    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V1.7.3</a>
     
     <script>
         const API_BASE = '/kq/api';
@@ -832,7 +836,18 @@
                     });
                     timeoffList.value.forEach(r => {
                         if (r.status === 'approved') {
-                            allRecords[r.date] = { type: 'leave', hours: r.hours, reason: r.reason || '' };
+                            // 如果当天已经有加班记录，标记为混合类型
+                            if (allRecords[r.date]) {
+                                allRecords[r.date] = { 
+                                    type: 'both',  // 混合类型
+                                    hours: allRecords[r.date].hours + r.hours,  // 累计时长
+                                    reason: (allRecords[r.date].reason || '') + ' + ' + (r.reason || ''),
+                                    overtimeHours: allRecords[r.date].hours,
+                                    leaveHours: r.hours
+                                };
+                            } else {
+                                allRecords[r.date] = { type: 'leave', hours: r.hours, reason: r.reason || '' };
+                            }
                         }
                     });
                     
@@ -885,20 +900,32 @@
                 function getColor(type, hours) {
                     const colors = {
                         overtime: ['#ebedf0', '#9be9a8', '#40c463', '#30a14e', '#216e39'],
-                        leave: ['#ebedf0', '#fff4b8', '#ffe066', '#ffc107', '#ff9800']
+                        leave: ['#ebedf0', '#fff4b8', '#ffe066', '#ffc107', '#ff9800'],
+                        both: ['#ebedf0', '#b39ddb', '#9575cd', '#7e57c2', '#673ab7']  // 紫色
                     };
                     return colors[type][getColorLevel(hours)];
                 }
                 
                 function showTooltip(event, day) {
                     if (!day) return;
+                    let typeText = '';
+                    let detailText = '';
+                    
+                    if (day.type === 'both') {
+                        typeText = '加班 + 调休';
+                        detailText = `加班 ${day.overtimeHours || ''}h + 调休 ${day.leaveHours || ''}h`;
+                    } else {
+                        typeText = day.type === 'overtime' ? '加班' : day.type === 'leave' ? '调休' : '';
+                        detailText = day.hours ? `${day.hours}小时` : '';
+                    }
+                    
                     tooltip.value = {
                         visible: true,
                         x: event.clientX + 10,
                         y: event.clientY + 10,
                         date: formatDisplayDate(day.date),
                         type: day.type,
-                        typeText: day.type === 'overtime' ? '加班' : day.type === 'leave' ? '调休' : '',
+                        typeText: typeText,
                         hours: day.hours,
                         reason: day.reason || '',
                         color: day.type ? getColor(day.type, day.hours) : '#ebedf0'
