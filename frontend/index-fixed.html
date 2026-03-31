@@ -721,7 +721,7 @@
     </div>
     
     <!-- 版本号 -->
-    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V1.9.1</a>
+    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V2.0.0</a>
     
     <script>
         const API_BASE = '/kq/api';
@@ -1204,7 +1204,34 @@
                     if (token) {
                         const payload = JSON.parse(atob(token.split('.')[1]));
                         currentUser.value = { id: payload.sub, name: '用户', role: payload.role };
-                        loadData().then(() => loadUserInfo());
+                        loadData().then(() => {
+                            loadUserInfo();
+                            // 检查 URL 参数，支持从推送消息直接跳转
+                            const urlParams = new URLSearchParams(window.location.search);
+                            const page = urlParams.get('page');
+                            const recordId = urlParams.get('id');
+                            if (page && recordId && currentUser.value.role === 'admin') {
+                                if (page === 'timeoff') {
+                                    currentPage.value = 'timeoff';
+                                    // 滚动到对应记录
+                                    setTimeout(() => {
+                                        const row = timeoffList.value.find(r => r.id == recordId);
+                                        if (row) {
+                                            // 高亮显示（可以通过添加临时样式实现）
+                                            alert('找到待审批记录，请查看详情');
+                                        }
+                                    }, 500);
+                                } else if (page === 'overtime') {
+                                    currentPage.value = 'overtime';
+                                    setTimeout(() => {
+                                        const row = overtimeList.value.find(r => r.id == recordId);
+                                        if (row) {
+                                            alert('找到待确认记录，请查看详情');
+                                        }
+                                    }, 500);
+                                }
+                            }
+                        });
                     }
                 });
                 

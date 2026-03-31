@@ -415,11 +415,14 @@ def create_time_off(request_data: TimeOffRequestCreate, current_user: database.U
     # 发送 webhook 通知
     webhook_config = load_webhook_config()
     if webhook_config.get("enabled") and webhook_config.get("notify_time_off"):
+        link_url = f"http://x.dysobo.cn:8888/kq/?page=timeoff&id={request.id}"
+        content = f"<b>申请人</b>：{current_user.name}<br><b>日期</b>：{request_data.date}<br><b>时长</b>：{request_data.hours}小时<br><b>事由</b>：{request_data.reason}"
         send_webhook(
             webhook_config,
-            "🏖️ 调休申请",
-            f"{current_user.name} 申请调休\n日期：{request_data.date}\n时长：{request_data.hours}小时\n事由：{request_data.reason}",
-            "http://x.dysobo.cn:8888/kq/"
+            "🏖️ 调休申请 - 待审批",
+            content,
+            link_url,
+            "mpnews"
         )
     
     return {"id": request.id, "message": "调休申请已提交"}
@@ -527,24 +530,52 @@ def save_webhook_config(config: dict):
         print(f"保存 webhook 配置失败：{e}")
         return False
 
-def send_webhook(config: dict, title: str, content: str, link_url: str = ""):
-    """发送 webhook 通知"""
+def send_webhook(config: dict, title: str, content: str, link_url: str = "", msg_type: str = "text"):
+    """发送 webhook 通知
+    Args:
+        config: webhook 配置
+        title: 标题
+        content: 内容
+        link_url: 跳转链接
+        msg_type: 消息类型 (text|mpnews)
+    """
     if not config.get("enabled") or not config.get("url") or not config.get("route_id"):
         return False
     try:
-        payload = {
-            "route_id": config.get("route_id", ""),
-            "title": title,
-            "content": content
-        }
-        if link_url:
-            payload["push_link_url"] = link_url
+        if msg_type == "mpnews":
+            # 企业微信图文消息
+            payload = {
+                "route_id": config.get("route_id", ""),
+                "msgtype": "mpnews",
+                "mpnews": {
+                    "articles": [
+                        {
+                            "title": title,
+                            "thumb_media_id": "",  # 可选：封面图
+                            "author": "考勤系统",
+                            "content_source_url": link_url,
+                            "content": content.replace("\n", "<br>"),
+                            "digest": content[:50] + "..." if len(content) > 50 else content
+                        }
+                    ]
+                }
+            }
+        else:
+            # 普通文本消息
+            payload = {
+                "route_id": config.get("route_id", ""),
+                "title": title,
+                "content": content
+            }
+            if link_url:
+                payload["push_link_url"] = link_url
+        
         response = requests.post(config.get("url", ""), json=payload, headers={"Content-Type": "application/json"}, timeout=10)
         if response.status_code == 200:
             print(f"✅ Webhook 通知发送成功：{title}")
             return True
         else:
-            print(f"❌ Webhook 通知发送失败：{response.status_code}")
+            print(f"❌ Webhook 通知发送失败：{response.status_code} - {response.text}")
             return False
     except Exception as e:
         print(f"❌ Webhook 通知发送异常：{e}")
@@ -595,11 +626,14 @@ def create_overtime(record_data: OvertimeRecordCreate, current_user: database.Us
     # 发送 webhook 通知
     webhook_config = load_webhook_config()
     if webhook_config.get("enabled") and webhook_config.get("notify_overtime"):
+        link_url = f"http://x.dysobo.cn:8888/kq/?page=overtime&id={record.id}"
+        content = f"<b>申请人</b>：{current_user.name}<br><b>日期</b>：{record_data.date}<br><b>时长</b>：{record_data.hours}小时<br><b>事由</b>：{record_data.reason}"
         send_webhook(
             webhook_config,
-            "⏰ 加班记录",
-            f"{current_user.name} 登记加班\n日期：{record_data.date}\n时长：{record_data.hours}小时\n事由：{record_data.reason}",
-            "http://x.dysobo.cn:8888/kq/"
+            "⏰ 加班记录 - 待确认",
+            content,
+            link_url,
+            "mpnews"
         )
     
     return {"id": record.id, "message": "加班记录已提交"}
