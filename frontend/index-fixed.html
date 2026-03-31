@@ -625,6 +625,9 @@
                                     <el-option label="管理员" value="admin"></el-option>
                                 </el-select>
                             </el-form-item>
+                            <el-form-item label="联系方式">
+                                <el-input v-model="userForm.phone" placeholder="请输入手机号（可选）"></el-input>
+                            </el-form-item>
                         </el-form>
                         <template #footer>
                             <el-button @click="showUserDialog=false">取消</el-button>
@@ -663,7 +666,7 @@
                 const shiftForm = ref({ user_id: null, date: '', shift_type: '', note: '' });
                 const timeoffForm = ref({ date: '', hours: 4, reason: '' });
                 const overtimeForm = ref({ date: '', hours: 1, reason: '' });
-                const userForm = ref({ name: '', password: '', role: 'member' });
+                const userForm = ref({ name: '', password: '', role: 'member', phone: '' });
                 const editingShiftId = ref(null);
                 const editingTimeoffId = ref(null);
                 const editingOvertimeId = ref(null);
@@ -878,8 +881,20 @@
                         webhookForm.value = webhookConfig;
                     } else {
                         const uid = currentUser.value.id;
-                        const [s, t, o] = await Promise.all([api('/shifts?user_id='+uid), api('/time-off?user_id='+uid), api('/overtime?user_id='+uid)]);
-                        shifts.value = s; timeoffList.value = t; overtimeList.value = o;
+                        // 组员加载自己的排班 + 班组排班（便于联系他人）
+                        const [myS, teamS, t, o] = await Promise.all([
+                            api('/shifts?user_id='+uid),
+                            api('/shifts/team'),
+                            api('/time-off?user_id='+uid),
+                            api('/overtime?user_id='+uid)
+                        ]);
+                        // 合并去重
+                        shifts.value = [...myS, ...teamS].reduce((acc, cur) => {
+                            if (!acc.find(item => item.id === cur.id)) acc.push(cur);
+                            return acc;
+                        }, []).sort((a, b) => new Date(a.date) - new Date(b.date));
+                        timeoffList.value = t;
+                        overtimeList.value = o;
                     }
                 };
                 

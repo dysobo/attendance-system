@@ -19,6 +19,7 @@ class User(Base):
     name = Column(String(50), unique=True, index=True, nullable=False)
     password = Column(String(100), nullable=False)
     role = Column(String(20), default="member")  # admin 或 member
+    phone = Column(String(20), nullable=True)  # 联系方式
     created_at = Column(DateTime, default=datetime.now)
 
 
