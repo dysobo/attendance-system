@@ -749,6 +749,7 @@ def export_monthly_stats(month: Optional[int] = None, year: Optional[int] = None
         raise HTTPException(status_code=403, detail="需要管理员权限")
     
     from datetime import timedelta
+    import calendar
     # 默认当前月份
     if not month or not year:
         today = date.today()
@@ -757,10 +758,7 @@ def export_monthly_stats(month: Optional[int] = None, year: Optional[int] = None
     
     # 计算月份起止日期
     month_start = date(year, month, 1)
-    if month == 12:
-        month_end = date(year + 1, 1, 1)
-    else:
-        month_end = date(year, month + 1, 1)
+    _, days_in_month = calendar.monthrange(year, month)
     
     # 获取所有用户
     users = db.query(database.User).filter(database.User.role == "member").all()
@@ -769,79 +767,56 @@ def export_monthly_stats(month: Optional[int] = None, year: Optional[int] = None
     output = io.StringIO()
     writer = csv.writer(output)
     
-    # 写入表头
-    writer.writerow(['考勤统计报表', f'{year}年{month}月'])
-    writer.writerow([])
+    # 写入表头 - 第一行：标题
+    header = ['姓名'] + [f'{d}日' for d in range(1, days_in_month + 1)]
+    writer.writerow(header)
     
-    # 调休汇总
-    writer.writerow(['=== 调休汇总 ==='])
-    writer.writerow(['姓名', '已批准调休 (小时)', '待审批调休 (小时)', '调休次数'])
+    # 写入每个用户的数据
     for user in users:
-        approved = db.query(database.TimeOffRequest).filter(
-            database.TimeOffRequest.user_id == user.id,
-            database.TimeOffRequest.status == "approved",
-            database.TimeOffRequest.date >= month_start,
-            database.TimeOffRequest.date < month_end
-        ).all()
-        pending = db.query(database.TimeOffRequest).filter(
-            database.TimeOffRequest.user_id == user.id,
-            database.TimeOffRequest.status == "pending",
-            database.TimeOffRequest.date >= month_start,
-            database.TimeOffRequest.date < month_end
-        ).all()
-        approved_hours = sum(r.hours for r in approved)
-        pending_hours = sum(r.hours for r in pending)
-        writer.writerow([user.name, approved_hours, pending_hours, len(approved)])
-    writer.writerow([])
-    
-    # 加班汇总
-    writer.writerow(['=== 加班汇总 ==='])
-    writer.writerow(['姓名', '已确认加班 (小时)', '待确认加班 (小时)', '加班次数'])
-    for user in users:
-        approved = db.query(database.OvertimeRecord).filter(
-            database.OvertimeRecord.user_id == user.id,
-            database.OvertimeRecord.status == "approved",
-            database.OvertimeRecord.date >= month_start,
-            database.OvertimeRecord.date < month_end
-        ).all()
-        pending = db.query(database.OvertimeRecord).filter(
-            database.OvertimeRecord.user_id == user.id,
-            database.OvertimeRecord.status == "pending",
-            database.OvertimeRecord.date >= month_start,
-            database.OvertimeRecord.date < month_end
-        ).all()
-        approved_hours = sum(r.hours for r in approved)
-        pending_hours = sum(r.hours for r in pending)
-        writer.writerow([user.name, approved_hours, pending_hours, len(approved)])
-    writer.writerow([])
-    
-    # 出勤率统计
-    writer.writerow(['=== 出勤统计 ==='])
-    writer.writerow(['姓名', '应出勤天数', '实际出勤天数', '出勤率'])
-    for user in users:
-        # 计算当月工作日（简单计算：总天数 - 周末）
-        import calendar
-        _, days_in_month = calendar.monthrange(year, month)
-        work_days = sum(1 for d in range(1, days_in_month + 1) 
-                       if date(year, month, d).weekday() < 5)
+        row = [user.name]
         
-        # 实际出勤天数（有排班的天数）
-        actual_shifts = db.query(database.Shift).filter(
-            database.Shift.user_id == user.id,
-            database.Shift.date >= month_start,
-            database.Shift.date < month_end,
-            database.Shift.shift_type != "休息"
-        ).count()
+        # 查询该用户当月的所有调休和加班记录
+        time_off_records = db.query(database.TimeOffRequest).filter(
+            database.TimeOffRequest.user_id == user.id,
+            database.TimeOffRequest.date >= month_start,
+            database.TimeOffRequest.date < date(year, month + 1, 1) if month < 12 else date(year + 1, 1, 1)
+        ).all()
         
-        attendance_rate = f"{actual_shifts / work_days * 100:.1f}%" if work_days > 0 else "0%"
-        writer.writerow([user.name, work_days, actual_shifts, attendance_rate])
+        overtime_records = db.query(database.OvertimeRecord).filter(
+            database.OvertimeRecord.user_id == user.id,
+            database.OvertimeRecord.date >= month_start,
+            database.OvertimeRecord.date < date(year, month + 1, 1) if month < 12 else date(year + 1, 1, 1)
+        ).all()
+        
+        # 按日期组织数据
+        daily_data = {}
+        for t in time_off_records:
+            day = t.date.day
+            if day not in daily_data:
+                daily_data[day] = []
+            daily_data[day].append(f"U{t.hours}h")  # U = 调休
+        
+        for o in overtime_records:
+            day = o.date.day
+            if day not in daily_data:
+                daily_data[day] = []
+            daily_data[day].append(f"▲{o.hours}h")  # ▲ = 加班
+        
+        # 填充每天的记录
+        for day in range(1, days_in_month + 1):
+            if day in daily_data:
+                row.append(' '.join(daily_data[day]))
+            else:
+                row.append('')
+        
+        writer.writerow(row)
     
     csv_content = output.getvalue()
     
-    return JSONResponse(
-        content={"filename": f"考勤统计_{year}年{month}月.csv", "data": csv_content},
-        headers={"Content-Disposition": f"attachment; filename=考勤统计_{year}年{month}月.csv"}
-    )
+    return {
+        "filename": f"考勤统计_{year}年{month}月.csv",
+        "data": csv_content
+    }
 
 @app.get("/api/backup/export")
 def export_backup(current_user: database.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
