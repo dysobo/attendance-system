@@ -640,7 +640,7 @@
     </div>
     
     <!-- 版本号 -->
-    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V1.5.2</a>
+    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V1.5.3</a>
     
     <script>
         const API_BASE = '/kq/api';
@@ -674,13 +674,15 @@
                 const pageTitle = computed(() => ({ dashboard:'📊 仪表盘', shifts:'📅 排班管理', timeoff:'🏖️ 调休申请', overtime:'⏰ 加班记录', users:'👥 用户管理', webhook:'🔔 消息推送', password:'🔑 修改密码' })[currentPage.value] || '考勤管理');
                 
                 const recentShifts = computed(() => {
+                    if (!currentUser.value) return [];
                     const today = new Date();
                     today.setHours(0, 0, 0, 0);
                     const future30Days = new Date(today.getTime() + 29 * 24 * 60 * 60 * 1000);
-                    // 显示所有人的排班（未来 30 天）
+                    const myId = Number(currentUser.value.id);
+                    // 只显示自己的排班（未来 30 天）
                     return shifts.value.filter(s => {
                         const d = new Date(s.date);
-                        return d >= today && d <= future30Days;
+                        return d >= today && d <= future30Days && Number(s.user_id) === myId;
                     }).sort((a, b) => new Date(a.date) - new Date(b.date));
                 });
                 
