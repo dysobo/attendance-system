@@ -701,7 +701,7 @@
     </div>
     
     <!-- 版本号 -->
-    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V1.7.7</a>
+    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V1.7.8</a>
     
     <script>
         const API_BASE = '/kq/api';
@@ -843,7 +843,12 @@
                     const allRecords = {};
                     overtimeList.value.forEach(r => {
                         if (r.status === 'approved') {
-                            allRecords[r.date] = { type: 'overtime', hours: r.hours, reason: r.reason || '' };
+                            allRecords[r.date] = { 
+                                type: 'overtime', 
+                                hours: r.hours, 
+                                reason: r.reason || '',
+                                overtimeHours: r.hours  // ← 保存原始加班时长
+                            };
                         }
                     });
                     timeoffList.value.forEach(r => {
@@ -854,7 +859,7 @@
                                     type: 'both',  // 混合类型
                                     hours: allRecords[r.date].hours + r.hours,  // 累计时长
                                     reason: (allRecords[r.date].reason || '') + ' + ' + (r.reason || ''),
-                                    overtimeHours: allRecords[r.date].hours,
+                                    overtimeHours: allRecords[r.date].overtimeHours,  // ← 使用保存的原始值
                                     leaveHours: r.hours
                                 };
                             } else {
