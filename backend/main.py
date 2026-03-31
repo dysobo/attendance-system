@@ -468,9 +468,9 @@ def delete_time_off(request_id: int, current_user: database.User = Depends(get_c
     if current_user.role != "admin" and request.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="无权限删除")
     
-    # 状态检查：只有 pending 状态可删除
-    if request.status != "pending":
-        raise HTTPException(status_code=400, detail="已审批，不可删除")
+    # 状态检查：pending 或 rejected 状态可删除
+    if request.status not in ["pending", "rejected"]:
+        raise HTTPException(status_code=400, detail="已批准，不可删除")
     
     db.delete(request)
     db.commit()
@@ -660,8 +660,8 @@ def delete_overtime(record_id: int, current_user: database.User = Depends(get_cu
     if current_user.role != "admin" and record.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="无权限删除")
     
-    # 状态检查：只有 pending 状态可删除
-    if record.status != "pending":
+    # 状态检查：pending 或 rejected 状态可删除
+    if record.status not in ["pending", "rejected"]:
         raise HTTPException(status_code=400, detail="已确认，不可删除")
     
     db.delete(record)

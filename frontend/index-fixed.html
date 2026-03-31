@@ -410,9 +410,9 @@
                                             <el-button size="small" @click="openEditTimeoff(scope.row)">编辑</el-button>
                                             <el-button size="small" type="danger" @click="confirmDeleteTimeoff(scope.row.id)">删除</el-button>
                                         </template>
-                                        <!-- 本人操作：只有 pending 状态可删除 -->
+                                        <!-- 本人操作：pending 或 rejected 状态可删除 -->
                                         <template v-else-if="Number(scope.row.user_id) === Number(currentUser.id)">
-                                            <el-button v-if="scope.row.status==='pending'" size="small" type="danger" @click="confirmDeleteTimeoff(scope.row.id)">撤销</el-button>
+                                            <el-button v-if="scope.row.status==='pending' || scope.row.status==='rejected'" size="small" type="danger" @click="confirmDeleteTimeoff(scope.row.id)">撤销</el-button>
                                         </template>
                                     </template>
                                 </el-table-column>
@@ -507,7 +507,7 @@
                                 <el-table-column prop="reason" label="事由"></el-table-column>
                                 <el-table-column prop="status" label="状态" width="80">
                                     <template #default="scope">
-                                        <el-tag :type="scope.row.status==='approved'?'success':'warning'" size="small">{{ scope.row.status==='approved'?'已确认':'待确认' }}</el-tag>
+                                        <el-tag :type="scope.row.status==='approved'?'success':scope.row.status==='rejected'?'danger':'warning'" size="small">{{ scope.row.status==='approved'?'已确认':scope.row.status==='rejected'?'已拒绝':'待确认' }}</el-tag>
                                     </template>
                                 </el-table-column>
                                 <el-table-column label="操作" width="220">
@@ -519,9 +519,9 @@
                                             <el-button size="small" @click="openEditOvertime(scope.row)">编辑</el-button>
                                             <el-button size="small" type="danger" @click="confirmDeleteOvertime(scope.row.id)">删除</el-button>
                                         </template>
-                                        <!-- 本人操作：只有 pending 状态可删除 -->
+                                        <!-- 本人操作：pending 或 rejected 状态可删除 -->
                                         <template v-else-if="Number(scope.row.user_id) === Number(currentUser.id)">
-                                            <el-button v-if="scope.row.status==='pending'" size="small" type="danger" @click="confirmDeleteOvertime(scope.row.id)">撤销</el-button>
+                                            <el-button v-if="scope.row.status==='pending' || scope.row.status==='rejected'" size="small" type="danger" @click="confirmDeleteOvertime(scope.row.id)">撤销</el-button>
                                         </template>
                                     </template>
                                 </el-table-column>
@@ -721,7 +721,7 @@
     </div>
     
     <!-- 版本号 -->
-    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V2.0.1</a>
+    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V2.1.0</a>
     
     <script>
         const API_BASE = '/kq/api';

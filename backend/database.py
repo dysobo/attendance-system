@@ -59,7 +59,7 @@ class OvertimeRecord(Base):
     date = Column(Date, nullable=False, index=True)
     hours = Column(Float, nullable=False)
     reason = Column(Text)
-    status = Column(String(20), default="pending")  # pending/approved
+    status = Column(String(20), default="pending")  # pending/approved/rejected
     approved_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.now)
 
