@@ -316,7 +316,7 @@
                         </div>
                         
                         <!-- 组员视图 -->
-                        <div v-else>
+                        <div v-if="currentUser.role!=='admin'">
                             <div style="background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);color:#fff;padding:20px;border-radius:12px;margin-bottom:20px">
                                 <h3 style="margin-bottom:10px">📅 我的排班</h3>
                                 <p style="font-size:13px;opacity:0.9">显示范围：近 3 个月 + 后 1 个月</p>
@@ -336,6 +336,32 @@
                                 <div style="font-size:64px;margin-bottom:15px">📭</div>
                                 <div style="font-size:16px;font-weight:600;margin-bottom:10px">近期没有排班</div>
                                 <div style="font-size:13px">请联系管理员安排排班</div>
+                            </div>
+                        </div>
+                        
+                        <!-- 班组排班（所有人员可见） -->
+                        <div style="margin-top:30px">
+                            <div style="background:linear-gradient(135deg, #f093fb 0%, #f5576c 100%);color:#fff;padding:20px;border-radius:12px;margin-bottom:20px">
+                                <h3 style="margin-bottom:10px">👥 班组排班</h3>
+                                <p style="font-size:13px;opacity:0.9">显示范围：今日往后 30 天（含今日）</p>
+                            </div>
+                            <div class="table-wrapper">
+                                <el-table :data="teamShifts" stripe>
+                                    <el-table-column prop="date" label="日期" width="100"></el-table-column>
+                                    <el-table-column prop="user_name" label="姓名" width="80"></el-table-column>
+                                    <el-table-column prop="shift_type" label="班次" width="80">
+                                        <template #default="scope">
+                                            <el-tag :type="scope.row.shift_type==='早班'?'success':scope.row.shift_type==='晚班'?'warning':'info'" size="small">{{ scope.row.shift_type }}</el-tag>
+                                        </template>
+                                    </el-table-column>
+                                    <el-table-column prop="phone" label="联系方式" width="120"></el-table-column>
+                                    <el-table-column prop="note" label="备注"></el-table-column>
+                                </el-table>
+                            </div>
+                            <div v-if="teamShifts.length===0" style="text-align:center;padding:60px 20px;color:#999">
+                                <div style="font-size:64px;margin-bottom:15px">📭</div>
+                                <div style="font-size:16px;font-weight:600;margin-bottom:10px">近期没有排班</div>
+                                <div style="font-size:13px">暂无未来 30 天的排班记录</div>
                             </div>
                         </div>
                     </div>
@@ -611,7 +637,7 @@
     </div>
     
     <!-- 版本号 -->
-    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V1.4.7</a>
+    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V1.5.0</a>
     
     <script>
         const API_BASE = '/kq/api';
@@ -660,6 +686,17 @@
                         const d = new Date(s.date);
                         return d >= past3Months && d <= future1Month && Number(s.user_id) === myId;
                     }).sort((a, b) => new Date(a.date) - new Date(b.date));
+                });
+                
+                // 班组排班 - 今日往后 30 天
+                const teamShifts = computed(() => {
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    const future30Days = new Date(today.getTime() + 29 * 24 * 60 * 60 * 1000);
+                    return shifts.value.filter(s => {
+                        const d = new Date(s.date);
+                        return d >= today && d <= future30Days;
+                    }).sort((a, b) => new Date(a.date) - new Date(b.date) || a.user_name.localeCompare(b.user_name));
                 });
                 
                 // 热力图数据
@@ -930,7 +967,7 @@
                     }
                 });
                 
-                return { currentUser, currentPage, menuOpen, loginForm, users, shifts, timeoffList, overtimeList, myStats, webhookForm, passwordForm, showShiftDialog, showTimeoffDialog, showOvertimeDialog, showUserDialog, shiftForm, timeoffForm, overtimeForm, userForm, pageTitle, recentShifts, myShifts, months, monthLabels, monthWidths, weekData, tooltip, handleLogin, handleLogout, loadData, loadUserInfo, openShiftDialog, saveShift, confirmDeleteShift, saveTimeoff, saveOvertime, saveUser, approveTimeoff, approveOvertime, openEditTimeoff, openEditOvertime, confirmDeleteTimeoff, confirmDeleteOvertime, confirmDeleteUser, toggleUserRole, openResetPassword, saveWebhookConfig, testWebhook, changePassword, getCellClass, showTooltip, hideTooltip };
+                return { currentUser, currentPage, menuOpen, loginForm, users, shifts, timeoffList, overtimeList, myStats, webhookForm, passwordForm, showShiftDialog, showTimeoffDialog, showOvertimeDialog, showUserDialog, shiftForm, timeoffForm, overtimeForm, userForm, pageTitle, recentShifts, myShifts, teamShifts, months, monthLabels, monthWidths, weekData, tooltip, handleLogin, handleLogout, loadData, loadUserInfo, openShiftDialog, saveShift, confirmDeleteShift, saveTimeoff, saveOvertime, saveUser, approveTimeoff, approveOvertime, openEditTimeoff, openEditOvertime, confirmDeleteTimeoff, confirmDeleteOvertime, confirmDeleteUser, toggleUserRole, openResetPassword, saveWebhookConfig, testWebhook, changePassword, getCellClass, showTooltip, hideTooltip };
             }
         }).use(ElementPlus).mount('#app');
     </script>

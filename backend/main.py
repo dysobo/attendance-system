@@ -243,6 +243,32 @@ def update_user_role(user_id: int, role_data: dict, current_user: database.User 
 
 # --- 排班管理 ---
 
+@app.get("/api/shifts/team")
+def get_team_shifts(db: Session = Depends(database.get_db)):
+    """获取班组排班 - 今日往后 30 天（含今日）"""
+    from datetime import timedelta
+    today = date.today()
+    end_date = today + timedelta(days=29)  # 含今日共 30 天
+    
+    shifts = db.query(database.Shift).filter(
+        database.Shift.date >= today,
+        database.Shift.date <= end_date
+    ).order_by(database.Shift.date, database.Shift.user_id).all()
+    
+    result = []
+    for s in shifts:
+        user = db.query(database.User).filter(database.User.id == s.user_id).first()
+        result.append({
+            "id": s.id,
+            "user_id": s.user_id,
+            "user_name": user.name if user else "未知",
+            "phone": user.phone if hasattr(user, 'phone') and user.phone else "-",  # 联系方式
+            "date": str(s.date),
+            "shift_type": s.shift_type,
+            "note": s.note
+        })
+    return result
+
 @app.get("/api/shifts")
 def list_shifts(start_date: Optional[date] = None, end_date: Optional[date] = None, user_id: Optional[int] = None, db: Session = Depends(database.get_db)):
     query = db.query(database.Shift)
