@@ -742,7 +742,7 @@
     </div>
     
     <!-- 版本号 -->
-    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V2.2.1</a>
+    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V2.2.2</a>
     
     <script>
         const API_BASE = '/kq/api';
@@ -890,6 +890,8 @@
                     
                     // 合并加班和调休数据
                     const allRecords = {};
+                    
+                    // 先处理加班记录
                     overtimeList.value.forEach(r => {
                         if (r.status === 'approved') {
                             allRecords[r.date] = { 
@@ -900,19 +902,23 @@
                             };
                         }
                     });
+                    
+                    // 再处理假期记录（所有 12 种类型）
                     timeoffList.value.forEach(r => {
-                        if (r.status === 'approved') {  // 所有假期类型都显示在热力图
-                            // 如果当天已经有加班记录，标记为混合类型
+                        if (r.status === 'approved') {
                             if (allRecords[r.date]) {
+                                // 当天已有加班 → 合并为 both
+                                const existing = allRecords[r.date];
                                 allRecords[r.date] = { 
                                     type: 'both',  // 混合类型
-                                    hours: allRecords[r.date].hours + r.hours,  // 累计时长
-                                    reason: (allRecords[r.date].reason || '') + ' + ' + (r.reason || ''),
-                                    overtimeHours: allRecords[r.date].overtimeHours,  // ← 使用保存的原始值
-                                    leaveHours: r.hours
+                                    hours: existing.hours + r.hours,  // 累计时长
+                                    reason: (existing.reason || '') + ' + ' + (r.reason || ''),
+                                    overtimeHours: existing.overtimeHours,  // ← 使用保存的原始值
+                                    leaveHours: (existing.leaveHours || 0) + r.hours  // ← 累加假期时长
                                 };
                             } else {
-                                allRecords[r.date] = { type: 'leave', hours: r.hours, reason: r.reason || '' };
+                                // 当天没有加班 → 只记录假期
+                                allRecords[r.date] = { type: 'leave', hours: r.hours, reason: r.reason || '', leaveHours: r.hours };
                             }
                         }
                     });
