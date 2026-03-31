@@ -698,7 +698,7 @@
     </div>
     
     <!-- 版本号 -->
-    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V1.7.5</a>
+    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V1.7.6</a>
     
     <script>
         const API_BASE = '/kq/api';
@@ -869,7 +869,14 @@
                             const isCurrentYear = date.getFullYear() === year;
                             if (isCurrentYear) {
                                 const info = allRecords[dateStr];
-                                week.days.push(info ? { date: dateStr, type: info.type, hours: info.hours, reason: info.reason } : { date: dateStr, type: null, hours: 0 });
+                                week.days.push(info ? { 
+                                    date: dateStr, 
+                                    type: info.type, 
+                                    hours: info.hours, 
+                                    reason: info.reason,
+                                    overtimeHours: info.overtimeHours,
+                                    leaveHours: info.leaveHours
+                                } : { date: dateStr, type: null, hours: 0 });
                             } else {
                                 week.days.push(null);
                             }
