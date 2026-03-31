@@ -698,7 +698,7 @@
     </div>
     
     <!-- 版本号 -->
-    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V1.7.4</a>
+    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V1.7.5</a>
     
     <script>
         const API_BASE = '/kq/api';
@@ -922,10 +922,13 @@
                     
                     if (day.type === 'both') {
                         typeText = '加班 + 调休';
-                        detailText = `加班 ${day.overtimeHours || ''}h + 调休 ${day.leaveHours || ''}h`;
-                    } else {
-                        typeText = day.type === 'overtime' ? '加班' : day.type === 'leave' ? '调休' : '';
-                        detailText = day.hours ? `${day.hours}小时` : '';
+                        detailText = `加班 ${day.overtimeHours}h + 调休 ${day.leaveHours}h`;
+                    } else if (day.type === 'overtime') {
+                        typeText = '加班';
+                        detailText = `${day.hours}小时`;
+                    } else if (day.type === 'leave') {
+                        typeText = '调休';
+                        detailText = `${day.hours}小时`;
                     }
                     
                     tooltip.value = {
