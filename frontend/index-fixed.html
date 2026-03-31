@@ -702,7 +702,7 @@
     </div>
     
     <!-- 版本号 -->
-    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V1.8.0</a>
+    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V1.8.1</a>
     
     <script>
         const API_BASE = '/kq/api';
@@ -751,11 +751,19 @@
                     today.setHours(0, 0, 0, 0);
                     const future30Days = new Date(today.getTime() + 29 * 24 * 60 * 60 * 1000);
                     const myId = Number(currentUser.value.id);
-                    // 只显示自己的排班（未来 30 天）
-                    return shifts.value.filter(s => {
-                        const d = new Date(s.date);
-                        return d >= today && d <= future30Days && Number(s.user_id) === myId;
-                    }).sort((a, b) => new Date(a.date) - new Date(b.date));
+                    
+                    // 管理员显示所有人的排班，组员只显示自己的
+                    if (currentUser.value.role === 'admin') {
+                        return shifts.value.filter(s => {
+                            const d = new Date(s.date);
+                            return d >= today && d <= future30Days;
+                        }).sort((a, b) => new Date(a.date) - new Date(b.date) || a.user_name.localeCompare(b.user_name));
+                    } else {
+                        return shifts.value.filter(s => {
+                            const d = new Date(s.date);
+                            return d >= today && d <= future30Days && Number(s.user_id) === myId;
+                        }).sort((a, b) => new Date(a.date) - new Date(b.date));
+                    }
                 });
                 
                 const myShifts = computed(() => {
