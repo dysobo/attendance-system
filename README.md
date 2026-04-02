@@ -7,8 +7,8 @@
 ## 📋 项目信息
 
 - **项目名称**: 考勤管理系统 (Attendance Management System)
-- **版本**: v1.4.2
-- **开发时间**: 2026-03-30
+- **版本**: V3.4
+- **开发时间**: 2026-03-30 ~ 2026-04-03
 - **GitHub**: github.com/dysobo/attendance-system
 
 ---
@@ -176,6 +176,9 @@ attendance-system/
 | name | VARCHAR(50) | 用户名（唯一） |
 | password | VARCHAR(100) | 密码（SHA256） |
 | role | VARCHAR(20) | 角色（admin/member） |
+| phone | VARCHAR(20) | 联系方式 |
+| wechat_user_id | VARCHAR(100) | 企业微信用户 ID |
+| enable_push | BOOLEAN | 是否启用推送 |
 | created_at | DATETIME | 创建时间 |
 
 ### 排班表 (shifts)
@@ -195,6 +198,7 @@ attendance-system/
 | user_id | INTEGER | 用户 ID（外键） |
 | date | DATE | 调休日期 |
 | hours | FLOAT | 时长（小时） |
+| type | VARCHAR(1) | 假期类型（U/B/S/H/C/L/J/Y/R/N/T/Z） |
 | reason | TEXT | 事由 |
 | status | VARCHAR(20) | 状态（pending/approved/rejected） |
 | approved_by | INTEGER | 审批人 ID |
@@ -257,6 +261,22 @@ attendance-system/
 |------|------|------|
 | `/api/webhook/config` | GET/POST | 获取/保存配置 |
 | `/api/webhook/test` | POST | 测试推送 |
+
+### 企业微信接口
+| 接口 | 方法 | 说明 |
+|------|------|------|
+| `/api/wechat/config` | GET/POST | 获取/保存企业微信配置 |
+| `/api/wechat/bind` | GET/POST | 获取/绑定企业微信用户 ID |
+| `/api/wechat/test-push` | POST | 测试企业微信推送 |
+| `/api/wechat/callback` | GET | 企业微信回调 URL 验证 |
+| `/api/wechat/callback` | POST | 接收企业微信消息/事件 |
+
+### 数据管理接口
+| 接口 | 方法 | 说明 |
+|------|------|------|
+| `/api/export/monthly` | GET | 导出月度考勤统计（CSV） |
+| `/api/backup/export` | GET | 导出全量数据备份（JSON） |
+| `/api/backup/import` | POST | 导入数据备份 |
 
 ---
 
@@ -353,9 +373,9 @@ systemctl restart nginx
 
 ## 📊 后续规划
 
-### 1️⃣ 成员独立推送 📅
-- [ ] 为每个成员配置独立的推送通道
-- [ ] 审批结果推送给申请人
+### 1️⃣ ~~成员独立推送 📅~~（已完成）
+- [x] ~~为每个成员配置独立的推送通道~~
+- [x] ~~审批结果推送给申请人~~
 - [ ] 排班变更推送给相关人员
 
 ### 2️⃣ 月末汇总推送 📈
@@ -368,7 +388,7 @@ systemctl restart nginx
 - [ ] 月度报表（Excel/PDF）
 - [ ] 调休/加班统计图表
 - [ ] 出勤率分析
-- [ ] 导出功能
+- [x] ~~导出功能~~（已完成）
 
 ### 4️⃣ 年度个人统计 📊
 - [ ] 年度调休/加班汇总
@@ -377,13 +397,20 @@ systemctl restart nginx
 - [ ] 可打印版本
 
 ### 5️⃣ 待定功能 💡
-- [ ] 请假类型分类（病假/事假/年假）
+- [x] ~~请假类型分类（病假/事假/年假）~~（已完成）
 - [ ] 考勤规则配置（迟到/早退）
 - [ ] 打卡功能（可选）
 - [ ] 日历视图
-- [ ] 数据导入/导出
+- [x] ~~数据导入/导出~~（已完成）
 - [ ] 多班组支持
 - [ ] 移动端 App（可选）
+
+### 6️⃣ 企业微信集成 💬（V3.0+ 新增）
+- [x] ~~企业微信原生 API 推送~~（已完成）
+- [x] ~~企业微信回调验证（Token + EncodingAESKey）~~（已完成）
+- [x] ~~企业微信菜单点击事件处理~~（已完成）
+- [x] ~~用户绑定企业微信 ID~~（已完成）
+- [ ] 企业微信审批流程集成
 
 ---
 
@@ -438,7 +465,22 @@ ssh root@服务器 IP -p 端口 "cp /root/attendance-backup-20260330.db /path/to
 
 ## 📝 更新日志
 
-### v1.4.7 (2026-03-30) - 修复 Webhook 配置加载 Bug 🔧
+### V3.4 (2026-04-03) - 企业微信回调修复 + 备份完善 🔧
+
+**🐛 Bug 修复**
+- ✅ 修复企业微信回调验证失败（AES 解密 IV 错误）
+- ✅ 修复 POST 回调缺少签名验证和消息解密
+- ✅ 统一解密函数为 `decrypt_wechat_msg`
+
+**💾 数据备份完善**
+- ✅ 用户备份新增 `wechat_user_id`、`enable_push`、`password` 字段
+- ✅ 调休备份新增 `type`、`updated_at` 字段
+- ✅ 新增企业微信配置表备份/恢复
+- ✅ 备份格式升级为 v2.0，兼容旧格式
+
+---
+
+### v3.3.2 (2026-04-02) - 数据统计修复 + 推送消息优化 📊
 
 **🐛 Bug 修复**
 - ✅ 修复消息推送配置刷新后消失的问题
@@ -540,5 +582,5 @@ ssh root@服务器 IP -p 端口 "cp /root/attendance-backup-20260330.db /path/to
 
 ---
 
-**最后更新**: 2026-03-30  
+**最后更新**: 2026-04-03  
 **维护人员**: 波仔和他的小龙虾 🦞
