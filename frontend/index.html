@@ -2,29 +2,42 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>考勤管理系统</title>
+    <title>产品试验室考勤</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://unpkg.com/element-plus"></script>
     <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
+        
+        /* 登录页 */
         .login-wrapper { display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
         .login-card { background: rgba(255,255,255,0.95); backdrop-filter: blur(10px); padding: 30px 24px; border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); width: 100%; max-width: 380px; }
         .login-header { text-align: center; margin-bottom: 25px; }
         .login-icon { font-size: 56px; display: block; margin-bottom: 12px; }
         .login-title { font-size: 22px; font-weight: 700; color: #333; }
+        
+        /* 主界面 */
         .main-wrapper { display: flex; min-height: 100vh; background: #f0f2f5; }
-        .sidebar { width: 220px; background: linear-gradient(180deg, #1e3c72 0%, #2a5298 100%); color: #fff; position: fixed; height: 100vh; overflow-y: auto; z-index: 1002; }
+        .sidebar { width: 220px; background: linear-gradient(180deg, #1e3c72 0%, #2a5298 100%); color: #fff; position: fixed; height: 100vh; overflow-y: auto; z-index: 1002; transition: transform 0.3s ease; }
         .sidebar-header { padding: 20px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.1); font-size: 18px; font-weight: 700; }
-        .menu-item { padding: 14px 18px; cursor: pointer; display: flex; align-items: center; gap: 10px; font-size: 14px; color: rgba(255,255,255,0.8); }
+        .menu-item { padding: 14px 18px; cursor: pointer; transition: all 0.3s; display: flex; align-items: center; gap: 10px; font-size: 14px; color: rgba(255,255,255,0.8); }
         .menu-item:hover { background: rgba(255,255,255,0.1); color: #fff; }
         .menu-item.active { background: rgba(255,255,255,0.2); color: #fff; border-left: 3px solid #409EFF; }
-        .main-content { margin-left: 220px; flex: 1; padding: 16px; width: 100%; max-width: 100vw; box-sizing: border-box; }
+        .main-content { margin-left: 220px; flex: 1; padding: 16px; transition: margin-left 0.3s ease; width: 100%; max-width: 100%; }
+        
+        /* 头部卡片 */
         .header-card { background: #fff; padding: 16px; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
         .page-title { font-size: 18px; font-weight: 700; color: #333; }
-        .content-card { background: #fff; padding: 16px; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); width: 100%; max-width: 100%; box-sizing: border-box; overflow-x: hidden; }
+        
+        /* 内容卡片 */
+        .content-card { background: #fff; padding: 16px; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); width: 100%; max-width: 100%; overflow-x: hidden; }
+        
+        /* 统计卡片 */
         .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
         .stat-card { padding: 16px 12px; border-radius: 12px; color: #fff; }
         .stat-card.blue { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
@@ -33,108 +46,796 @@
         .stat-card.green { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); }
         .stat-label { font-size: 12px; opacity: 0.9; margin-bottom: 6px; }
         .stat-number { font-size: 24px; font-weight: 700; }
-        .quick-timeoff-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; padding: 20px; border-radius: 16px; margin-bottom: 20px; }
-        .quick-timeoff-card h3 { font-size: 18px; margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }
-        .quick-timeoff-form { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 10px; align-items: end; }
-        .quick-timeoff-form .el-form-item { margin-bottom: 0 !important; }
-        .quick-timeoff-form .el-form-item__label { color: #fff !important; font-size: 13px; }
+        
+        /* 表格 */
+        .table-wrapper { overflow-x: auto; border-radius: 8px; }
+        .section-title { font-size: 16px; font-weight: 700; margin: 16px 0 12px; }
+        
+        /* 移动端优化 */
+        .mobile-menu-btn { display: none; position: fixed; top: 12px; left: 12px; z-index: 1003; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; border: none; padding: 10px 14px; border-radius: 10px; font-size: 18px; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+        .overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1001; }
+        
+        /* Element Plus 优化 */
+        .el-dialog { max-width: 380px !important; margin: 0 auto !important; }
+        .el-input, .el-select, .el-date-picker { max-width: 100% !important; }
+        
+        /* 手机端适配 */
         @media (max-width: 768px) {
             .sidebar { transform: translateX(-100%); }
             .sidebar.open { transform: translateX(0); }
-            .main-content { margin-left: 0; padding: 12px; padding-top: 50px; }
-            .stats-grid { grid-template-columns: repeat(2, 1fr); }
-            .quick-timeoff-form { grid-template-columns: 1fr; }
+            .main-content { margin-left: 0 !important; padding: 12px !important; padding-top: 50px !important; }
+            .mobile-menu-btn { display: block; }
+            .overlay.show { display: block; }
+            .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+            .stat-card { padding: 14px 10px; }
+            .stat-number { font-size: 20px; }
+            .header-card { flex-direction: column; align-items: flex-start; }
+            .table-wrapper { overflow-x: auto !important; }
+        }
+        
+        /* 小屏幕手机 */
+        @media (max-width: 375px) {
+            .stats-grid { grid-template-columns: 1fr; }
+            .stat-number { font-size: 18px; }
+        }
+        
+        /* 版本号 */
+        .version-tag {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.6);
+            color: #fff;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            z-index: 9999;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-block;
+        }
+        
+        .version-tag:hover {
+            background: rgba(0,0,0,0.8);
+            transform: scale(1.05);
+        }
+        
+        /* 热力图样式 */
+        .heatmap-container {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            font-size: 11px;
+            overflow-x: auto;
+            padding: 16px 0;
+            position: relative;
+        }
+        .month-labels {
+            display: flex;
+            padding-left: 36px;  /* 32px(星期标签宽度) + 4px(右边距),与热力图网格对齐 */
+            margin-bottom: 8px;
+            color: #666;
+            font-size: 11px;
+            width: max-content;
+        }
+        .month-label {
+            text-align: center;
+            color: #666;
+            flex-shrink: 0;  /* 防止 flex 压缩 */
+        }
+        .heatmap-grid {
+            display: flex;
+            gap: 2px;
+        }
+        .weekday-labels {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            margin-right: 4px;
+            color: #666;
+            font-size: 10px;
+        }
+        .weekday-label {
+            height: 12px;
+            line-height: 12px;
+            text-align: right;
+            min-width: 32px;
+        }
+        .week-column {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .heatmap-cell {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+            background-color: #ebedf0;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .heatmap-cell:hover {
+            transform: scale(1.3);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            z-index: 10;
+            position: relative;
+        }
+        .cell-overtime-1 { background-color: #9be9a8; }
+        .cell-overtime-2 { background-color: #40c463; }
+        .cell-overtime-3 { background-color: #30a14e; }
+        .cell-overtime-4 { background-color: #216e39; }
+        .cell-leave-1 { background-color: #fff4b8; }
+        .cell-leave-2 { background-color: #ffe066; }
+        .cell-leave-3 { background-color: #ffc107; }
+        .cell-leave-4 { background-color: #ff9800; }
+        /* 混合类型 - 45°斜对角分割 */
+        .cell-both-1 { 
+            background: linear-gradient(135deg, #9be9a8 50%, #fff4b8 50%);
+        }
+        .cell-both-2 { 
+            background: linear-gradient(135deg, #40c463 50%, #ffe066 50%);
+        }
+        .cell-both-3 { 
+            background: linear-gradient(135deg, #30a14e 50%, #ffc107 50%);
+        }
+        .cell-both-4 { 
+            background: linear-gradient(135deg, #216e39 50%, #ff9800 50%);
+        }
+        .heatmap-tooltip {
+            position: fixed;
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-size: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            z-index: 10000;
+            pointer-events: none;
+            max-width: 200px;
+        }
+        .tooltip-date {
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        .tooltip-detail {
+            color: #666;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .tooltip-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 2px;
+            flex-shrink: 0;
+        }
+        .heatmap-legend {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            margin-top: 16px;
+            font-size: 11px;
+            color: #666;
+        }
+        .legend-group {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .legend-label {
+            margin-right: 4px;
+            font-weight: 500;
+        }
+        .legend-cells {
+            display: flex;
+            gap: 2px;
+        }
+        .legend-cell {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
         }
     </style>
 </head>
 <body>
     <div id="app">
+        <!-- 移动端菜单按钮 -->
+        <button class="mobile-menu-btn" @click="menuOpen=!menuOpen">☰</button>
+        <div class="overlay" :class="{show: menuOpen}" @click="menuOpen=false"></div>
+        
+        <!-- 登录页 -->
         <div v-if="!currentUser" class="login-wrapper">
             <div class="login-card">
                 <div class="login-header">
                     <span class="login-icon">📋</span>
                     <h1 class="login-title">考勤管理系统</h1>
                 </div>
-                <el-form :model="loginForm" size="default">
-                    <el-form-item style="margin-bottom:14px"><el-input v-model="loginForm.name" placeholder="用户名" clearable></el-input></el-form-item>
-                    <el-form-item style="margin-bottom:14px"><el-input v-model="loginForm.password" type="password" placeholder="密码" @keyup.enter="handleLogin"></el-input></el-form-item>
-                    <el-form-item style="margin-bottom:18px"><div style="display:flex;align-items:center;gap:6px"><el-checkbox v-model="rememberMe" size="small"></el-checkbox><span style="color:#666;font-size:13px">记住登录</span></div></el-form-item>
-                    <el-form-item><el-button type="primary" style="width:100%" @click="handleLogin" round>登 录</el-button></el-form-item>
-                </el-form>
+                <el-input v-model="loginForm.name" placeholder="用户名" style="margin-bottom:15px"></el-input>
+                <el-input v-model="loginForm.password" type="password" placeholder="密码" @keyup.enter="handleLogin" style="margin-bottom:20px"></el-input>
+                <el-button type="primary" style="width:100%" @click="handleLogin">登 录</el-button>
             </div>
         </div>
         
+        <!-- 主界面 -->
         <div v-else class="main-wrapper">
-            <div class="sidebar">
-                <div class="sidebar-header"><div>📊 考勤管理</div></div>
-                <div class="menu-item" :class="{active: currentPage==='dashboard'}" @click="currentPage='dashboard'"><span>📊</span><span>仪表盘</span></div>
-                <div class="menu-item" :class="{active: currentPage==='shifts'}" @click="currentPage='shifts'"><span>📅</span><span>排班管理</span></div>
-                <div class="menu-item" :class="{active: currentPage==='timeoff'}" @click="currentPage='timeoff'"><span>🏖️</span><span>调休申请</span></div>
-                <div class="menu-item" :class="{active: currentPage==='overtime'}" @click="currentPage='overtime'"><span>⏰</span><span>加班记录</span></div>
-                <div class="menu-item" v-if="currentUser.role==='admin'" :class="{active: currentPage==='users'}" @click="currentPage='users'"><span>👥</span><span>用户管理</span></div>
-                <div class="menu-item" v-if="currentUser.role==='admin'" :class="{active: currentPage==='webhook'}" @click="currentPage='webhook'"><span>🔔</span><span>消息推送</span></div>
-                <div class="menu-item" :class="{active: currentPage==='password'}" @click="currentPage='password'"><span>🔑</span><span>修改密码</span></div>
-                <div class="menu-item" @click="handleLogout" style="margin-top:auto;border-top:1px solid rgba(255,255,255,0.1)"><span>🚪</span><span>退出登录</span></div>
+            <!-- 侧边栏 -->
+            <div class="sidebar" :class="{open: menuOpen}">
+                <div class="sidebar-header">📊 考勤管理</div>
+                <div class="menu-item" :class="{active: currentPage==='dashboard'}" @click="currentPage='dashboard';menuOpen=false">📊 仪表盘</div>
+                <div class="menu-item" :class="{active: currentPage==='shifts'}" @click="currentPage='shifts';menuOpen=false">📅 排班管理</div>
+                <div class="menu-item" :class="{active: currentPage==='timeoff'}" @click="currentPage='timeoff';menuOpen=false">🏖️ 调休申请</div>
+                <div class="menu-item" :class="{active: currentPage==='overtime'}" @click="currentPage='overtime';menuOpen=false">⏰ 加班记录</div>
+                <div class="menu-item" v-if="currentUser.role==='admin'" :class="{active: currentPage==='users'}" @click="currentPage='users';menuOpen=false">👥 用户管理</div>
+                <div class="menu-item" v-if="currentUser.role==='admin'" :class="{active: currentPage==='webhook'}" @click="currentPage='webhook';menuOpen=false">🔔 消息推送</div>
+                <div class="menu-item" v-if="currentUser.role==='admin'" :class="{active: currentPage==='export'}" @click="currentPage='export';menuOpen=false">📊 数据导出</div>
+                <div class="menu-item" :class="{active: currentPage==='password'}" @click="currentPage='password';menuOpen=false">🔑 修改密码</div>
+                <div class="menu-item" @click="handleLogout" style="margin-top:auto;border-top:1px solid rgba(255,255,255,0.1)">🚪 退出登录</div>
             </div>
             
+            <!-- 主内容区 -->
             <div class="main-content">
                 <div class="header-card">
                     <h1 class="page-title">{{ pageTitle }}</h1>
-                    <div style="display:flex;align-items:center;gap:8px">
-                        <el-tag :type="currentUser.role==='admin'?'danger':'primary'" size="small" effect="dark">{{ currentUser.role==='admin'?'管理员':'组员' }}</el-tag>
-                        <span style="color:#666;font-size:13px">{{ currentUser.name }}</span>
-                    </div>
+                    <el-tag :type="currentUser.role==='admin'?'danger':'primary'" size="small" effect="dark">{{ currentUser.role==='admin'?'管理员':'组员' }}</el-tag><span style="margin-left:8px;color:#666;font-size:13px">{{ currentUser.name }}</span>
                 </div>
                 
                 <div class="content-card">
-                    <!-- 一键调休（仅组员显示） -->
-                    <div v-if="currentUser.role !== 'admin' && currentPage === 'dashboard'" class="quick-timeoff-card">
-                        <h3>🏖️ 一键调休 - 快速申请今日调休</h3>
-                        <div class="quick-timeoff-form">
-                            <el-form-item label="日期">
-                                <el-date-picker v-model="quickTimeoffForm.date" type="date" placeholder="选择日期" style="width:100%" value-format="YYYY-MM-DD"></el-date-picker>
-                            </el-form-item>
-                            <el-form-item label="时长 (小时)">
-                                <el-input-number v-model="quickTimeoffForm.hours" :min="0.5" :max="24" :step="0.5" style="width:100%" controls-position="right"></el-input-number>
-                            </el-form-item>
-                            <el-form-item label="事由">
-                                <el-input v-model="quickTimeoffForm.reason" placeholder="选填"></el-input>
-                            </el-form-item>
-                            <el-button type="warning" @click="submitQuickTimeoff" style="height:40px;font-weight:600">🚀 立即提交</el-button>
+                    <!-- 仪表盘 -->
+                    <div v-show="currentPage === 'dashboard'">
+                        <div class="stats-grid">
+                            <div class="stat-card blue"><div class="stat-label">已批准调休</div><div class="stat-number">{{ myStats.time_off_approved||0 }}小时</div></div>
+                            <div class="stat-card pink"><div class="stat-label">待审批调休</div><div class="stat-number">{{ myStats.time_off_pending||0 }}条</div></div>
+                            <div class="stat-card cyan"><div class="stat-label">累计加班</div><div class="stat-number">{{ myStats.overtime_hours||0 }}小时</div></div>
+                            <div class="stat-card green"><div class="stat-label">待确认加班</div><div class="stat-number">{{ myStats.overtime_pending||0 }}条</div></div>
+                        </div>
+                        <h2 class="section-title">📅 近期排班（未来 30 天）</h2>
+                        <div class="table-wrapper">
+                            <el-table :data="recentShifts" stripe>
+                                <el-table-column prop="date" label="日期" width="100"></el-table-column>
+                                <el-table-column prop="user_name" label="姓名" width="80"></el-table-column>
+                                <el-table-column prop="shift_type" label="班次" width="80">
+                                    <template #default="scope">
+                                        <el-tag :type="scope.row.shift_type==='早班'?'success':scope.row.shift_type==='晚班'?'warning':'info'" size="small">{{ scope.row.shift_type }}</el-tag>
+                                    </template>
+                                </el-table-column>
+                                <el-table-column prop="phone" label="联系方式" width="120"></el-table-column>
+                                <el-table-column prop="note" label="备注"></el-table-column>
+                            </el-table>
+                        </div>
+                        <div v-if="recentShifts.length===0" style="text-align:center;padding:40px;color:#999">
+                            <div style="font-size:48px;margin-bottom:10px">📭</div>
+                            <div>近期暂无排班记录</div>
                         </div>
                     </div>
                     
-                    <div v-show="currentPage === 'dashboard'">
-                        <div class="stats-grid">
-                            <div class="stat-card blue"><div class="stat-label">已批准调休</div><div class="stat-number">{{ myStats.time_off_approved||0 }}<span style="font-size:12px">天</span></div></div>
-                            <div class="stat-card pink"><div class="stat-label">待审批调休</div><div class="stat-number">{{ myStats.time_off_pending||0 }}<span style="font-size:12px">天</span></div></div>
-                            <div class="stat-card cyan"><div class="stat-label">累计加班</div><div class="stat-number">{{ myStats.overtime_hours||0 }}<span style="font-size:12px">小时</span></div></div>
-                            <div class="stat-card green"><div class="stat-label">待确认加班</div><div class="stat-number">{{ myStats.overtime_pending||0 }}<span style="font-size:12px">条</span></div></div>
-                        </div>
-                        <div class="table-section">
-                            <h2 class="section-title">📅 近期排班（未来 30 天）</h2>
-                            <div class="table-wrapper">
-                                <el-table :data="recentShifts" stripe style="width:100%" size="small">
-                                    <el-table-column prop="date" label="日期" width="90"></el-table-column>
-                                    <el-table-column prop="user_name" label="姓名" width="70"></el-table-column>
-                                    <el-table-column prop="shift_type" label="班次" width="60">
+                    <!-- 排班管理 -->
+                    <div v-show="currentPage === 'shifts'">
+                        <!-- 管理员视图 -->
+                        <div v-if="currentUser.role==='admin'">
+                            <el-button type="primary" @click="openShiftDialog(false)">➕ 添加排班</el-button>
+                            <div class="table-wrapper" style="margin-top:15px">
+                                <el-table :data="shifts" stripe>
+                                    <el-table-column prop="date" label="日期" width="100"></el-table-column>
+                                    <el-table-column prop="user_name" label="姓名" width="80"></el-table-column>
+                                    <el-table-column prop="shift_type" label="班次" width="80">
                                         <template #default="scope">
-                                            <el-tag :type="scope.row.shift_type==='早班'?'success':scope.row.shift_type==='晚班'?'warning':'info'" size="small" effect="plain">{{ scope.row.shift_type }}</el-tag>
+                                            <el-tag :type="scope.row.shift_type==='早班'?'success':scope.row.shift_type==='晚班'?'warning':'info'" size="small">{{ scope.row.shift_type }}</el-tag>
+                                        </template>
+                                    </el-table-column>
+                                    <el-table-column prop="note" label="备注"></el-table-column>
+                                    <el-table-column label="操作" width="180">
+                                        <template #default="scope">
+                                            <el-button size="small" @click="openShiftDialog(true, scope.row)">编辑</el-button>
+                                            <el-button size="small" type="danger" @click="confirmDeleteShift(scope.row.id)">删除</el-button>
+                                        </template>
+                                    </el-table-column>
+                                </el-table>
+                            </div>
+                            <div v-if="shifts.length===0" style="text-align:center;padding:40px;color:#999">
+                                <div style="font-size:48px;margin-bottom:10px">📭</div>
+                                <div>暂无排班记录</div>
+                            </div>
+                        </div>
+                        
+                        <!-- 组员视图 -->
+                        <div v-if="currentUser.role!=='admin'">
+                            <div style="background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);color:#fff;padding:20px;border-radius:12px;margin-bottom:20px">
+                                <h3 style="margin-bottom:10px">📅 我的排班</h3>
+                                <p style="font-size:13px;opacity:0.9">显示范围：近 3 个月 + 后 1 个月</p>
+                            </div>
+                            <div class="table-wrapper">
+                                <el-table :data="myShifts" stripe>
+                                    <el-table-column prop="date" label="日期" width="100"></el-table-column>
+                                    <el-table-column prop="shift_type" label="班次" width="80">
+                                        <template #default="scope">
+                                            <el-tag :type="scope.row.shift_type==='早班'?'success':scope.row.shift_type==='晚班'?'warning':'info'" size="small">{{ scope.row.shift_type }}</el-tag>
                                         </template>
                                     </el-table-column>
                                     <el-table-column prop="note" label="备注"></el-table-column>
                                 </el-table>
                             </div>
-                            <div v-if="recentShifts.length===0" class="empty-state">
-                                <div class="empty-icon">📭</div>
-                                <div class="empty-text">近期暂无排班记录</div>
+                            <div v-if="myShifts.length===0" style="text-align:center;padding:60px 20px;color:#999">
+                                <div style="font-size:64px;margin-bottom:15px">📭</div>
+                                <div style="font-size:16px;font-weight:600;margin-bottom:10px">近期没有排班</div>
+                                <div style="font-size:13px">请联系管理员安排排班</div>
+                            </div>
+                        </div>
+                        
+                        <!-- 班组排班（所有人员可见） -->
+                        <div style="margin-top:30px">
+                            <div style="background:linear-gradient(135deg, #f093fb 0%, #f5576c 100%);color:#fff;padding:20px;border-radius:12px;margin-bottom:20px">
+                                <h3 style="margin-bottom:10px">👥 班组排班</h3>
+                                <p style="font-size:13px;opacity:0.9">显示范围：今日往后 30 天（含今日）</p>
+                            </div>
+                            <div class="table-wrapper">
+                                <el-table :data="teamShifts" stripe>
+                                    <el-table-column prop="date" label="日期" width="100"></el-table-column>
+                                    <el-table-column prop="user_name" label="姓名" width="80"></el-table-column>
+                                    <el-table-column prop="shift_type" label="班次" width="80">
+                                        <template #default="scope">
+                                            <el-tag :type="scope.row.shift_type==='早班'?'success':scope.row.shift_type==='晚班'?'warning':'info'" size="small">{{ scope.row.shift_type }}</el-tag>
+                                        </template>
+                                    </el-table-column>
+                                    <el-table-column prop="phone" label="联系方式" width="120"></el-table-column>
+                                </el-table>
+                            </div>
+                            <div v-if="teamShifts.length===0" style="text-align:center;padding:60px 20px;color:#999">
+                                <div style="font-size:64px;margin-bottom:15px">📭</div>
+                                <div style="font-size:16px;font-weight:600;margin-bottom:10px">近期没有排班</div>
+                                <div style="font-size:13px">暂无未来 30 天的排班记录</div>
                             </div>
                         </div>
                     </div>
+                    
+                    <!-- 调休申请 -->
+                    <div v-show="currentPage === 'timeoff'">
+                        <el-button type="primary" @click="showTimeoffDialog=true">➕ 申请调休</el-button>
+                        <div class="table-wrapper" style="margin-top:15px">
+                            <el-table :data="timeoffList" stripe>
+                                <el-table-column prop="date" label="日期" width="100"></el-table-column>
+                                <el-table-column prop="type" label="类型" width="60">
+                                    <template #default="scope">
+                                        <el-tag size="small">{{ scope.row.type || 'U' }}</el-tag>
+                                    </template>
+                                </el-table-column>
+                                <el-table-column prop="hours" label="时长" width="60"></el-table-column>
+                                <el-table-column prop="user_name" label="申请人" width="80"></el-table-column>
+                                <el-table-column prop="reason" label="事由"></el-table-column>
+                                <el-table-column prop="status" label="状态" width="80">
+                                    <template #default="scope">
+                                        <el-tag :type="scope.row.status==='approved'?'success':scope.row.status==='rejected'?'danger':'warning'" size="small">{{ scope.row.status==='approved'?'已批准':scope.row.status==='rejected'?'已拒绝':'待审批' }}</el-tag>
+                                    </template>
+                                </el-table-column>
+                                <el-table-column label="操作" width="220">
+                                    <template #default="scope">
+                                        <!-- 管理员操作 -->
+                                        <template v-if="currentUser.role==='admin'">
+                                            <el-button v-if="scope.row.status==='pending'" size="small" type="success" @click="openApproveTimeoff(scope.row)">审批</el-button>
+                                            <el-button size="small" @click="openEditTimeoff(scope.row)">编辑</el-button>
+                                            <el-button size="small" type="danger" @click="confirmDeleteTimeoff(scope.row.id)">删除</el-button>
+                                        </template>
+                                        <!-- 本人操作：pending 或 rejected 状态可删除 -->
+                                        <template v-else-if="Number(scope.row.user_id) === Number(currentUser.id)">
+                                            <el-button v-if="scope.row.status==='pending' || scope.row.status==='rejected'" size="small" type="danger" @click="confirmDeleteTimeoff(scope.row.id)">撤销</el-button>
+                                        </template>
+                                    </template>
+                                </el-table-column>
+                            </el-table>
+                        </div>
+                    </div>
+                    
+                    <!-- 加班记录 -->
+                    <div v-show="currentPage === 'overtime'">
+                        <el-button type="primary" @click="showOvertimeDialog=true">➕ 登记加班</el-button>
+                        
+                        <!-- 加班热力图 -->
+                        <div style="margin-top:20px;background:#fff;padding:20px;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.08)">
+                            <h3 style="margin-bottom:15px;font-size:16px;color:#333">📊 本年度加班调休热力图</h3>
+                            
+                            <!-- 热力图容器 -->
+                            <div class="heatmap-container">
+                                <!-- 月份标签 -->
+                                <div class="month-labels">
+                                    <span v-for="(month, index) in monthLabels" :key="index" class="month-label" :style="{ width: monthWidths[index] + 'px' }">{{ month }}</span>
+                                </div>
+                                
+                                <!-- 热力图网格 -->
+                                <div class="heatmap-grid">
+                                    <!-- 星期标签 -->
+                                    <div class="weekday-labels">
+                                        <span class="weekday-label">日</span>
+                                        <span class="weekday-label"></span>
+                                        <span class="weekday-label">二</span>
+                                        <span class="weekday-label"></span>
+                                        <span class="weekday-label">四</span>
+                                        <span class="weekday-label"></span>
+                                        <span class="weekday-label">六</span>
+                                    </div>
+                                    
+                                    <!-- 周列 -->
+                                    <div v-for="(week, weekIndex) in weekData" :key="weekIndex" class="week-column">
+                                        <div
+                                            v-for="(day, dayIndex) in week.days"
+                                            :key="dayIndex"
+                                            class="heatmap-cell"
+                                            :class="getCellClass(day)"
+                                            @mouseenter="showTooltip($event, day)"
+                                            @mouseleave="hideTooltip"
+                                        ></div>
+                                    </div>
+                                </div>
+                                
+                                <!-- 图例 -->
+                                <div class="heatmap-legend">
+                                    <div class="legend-group">
+                                        <span class="legend-label">加班</span>
+                                        <div class="legend-cells">
+                                            <div class="legend-cell" style="background:#9be9a8"></div>
+                                            <div class="legend-cell" style="background:#40c463"></div>
+                                            <div class="legend-cell" style="background:#30a14e"></div>
+                                            <div class="legend-cell" style="background:#216e39"></div>
+                                        </div>
+                                    </div>
+                                    <div class="legend-group">
+                                        <span class="legend-label">调休</span>
+                                        <div class="legend-cells">
+                                            <div class="legend-cell" style="background:#fff4b8"></div>
+                                            <div class="legend-cell" style="background:#ffe066"></div>
+                                            <div class="legend-cell" style="background:#ffc107"></div>
+                                            <div class="legend-cell" style="background:#ff9800"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- 悬浮提示 -->
+                                <div v-if="tooltip.visible" class="heatmap-tooltip" :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }">
+                                    <div class="tooltip-date">{{ tooltip.date }}</div>
+                                    <div v-if="tooltip.type" class="tooltip-detail">
+                                        <div class="tooltip-dot" :style="{ backgroundColor: tooltip.color }"></div>
+                                        <span>{{ tooltip.typeText }}</span>
+                                    </div>
+                                    <div v-if="tooltip.reason" class="tooltip-detail" style="margin-top:4px;color:#999">
+                                        {{ tooltip.reason }}
+                                    </div>
+                                    <div v-if="!tooltip.type" class="tooltip-detail">无记录</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="table-wrapper" style="margin-top:20px">
+                            <el-table :data="overtimeList" stripe>
+                                <el-table-column prop="date" label="日期" width="100"></el-table-column>
+                                <el-table-column prop="hours" label="时长" width="60"></el-table-column>
+                                <el-table-column prop="user_name" label="申请人" width="80"></el-table-column>
+                                <el-table-column prop="reason" label="事由"></el-table-column>
+                                <el-table-column prop="status" label="状态" width="80">
+                                    <template #default="scope">
+                                        <el-tag :type="scope.row.status==='approved'?'success':scope.row.status==='rejected'?'danger':'warning'" size="small">{{ scope.row.status==='approved'?'已确认':scope.row.status==='rejected'?'已拒绝':'待确认' }}</el-tag>
+                                    </template>
+                                </el-table-column>
+                                <el-table-column label="操作" width="220">
+                                    <template #default="scope">
+                                        <!-- 管理员操作 -->
+                                        <template v-if="currentUser.role==='admin'">
+                                            <el-button v-if="scope.row.status==='pending'" size="small" type="success" @click="openApproveOvertime(scope.row)">审批</el-button>
+                                            <el-button size="small" @click="openEditOvertime(scope.row)">编辑</el-button>
+                                            <el-button size="small" type="danger" @click="confirmDeleteOvertime(scope.row.id)">删除</el-button>
+                                        </template>
+                                        <!-- 本人操作：pending 或 rejected 状态可删除 -->
+                                        <template v-else-if="Number(scope.row.user_id) === Number(currentUser.id)">
+                                            <el-button v-if="scope.row.status==='pending' || scope.row.status==='rejected'" size="small" type="danger" @click="confirmDeleteOvertime(scope.row.id)">撤销</el-button>
+                                        </template>
+                                    </template>
+                                </el-table-column>
+                            </el-table>
+                        </div>
+                    </div>
+                    
+                    <!-- 用户管理 -->
+                    <div v-show="currentPage === 'users' && currentUser.role==='admin'">
+                        <el-button type="primary" @click="showUserDialog=true">➕ 添加用户</el-button>
+                        <div class="table-wrapper" style="margin-top:15px">
+                            <el-table :data="users" stripe>
+                                <el-table-column prop="name" label="用户名"></el-table-column>
+                                <el-table-column prop="role" label="角色" width="100">
+                                    <template #default="scope">
+                                        <el-tag :type="scope.row.role==='admin'?'danger':'primary'" size="small">{{ scope.row.role==='admin'?'管理员':'组员' }}</el-tag>
+                                    </template>
+                                </el-table-column>
+                                <el-table-column prop="phone" label="联系方式" width="150">
+                                    <template #default="scope">
+                                        {{ scope.row.phone || '-' }}
+                                    </template>
+                                </el-table-column>
+                                <el-table-column prop="enable_push" label="推送" width="80">
+                                    <template #default="scope">
+                                        <el-tag :type="scope.row.enable_push?'success':'info'" size="small">{{ scope.row.enable_push?'已启用':'已禁用' }}</el-tag>
+                                    </template>
+                                </el-table-column>
+                                <el-table-column label="操作" width="280">
+                                    <template #default="scope">
+                                        <el-button size="small" @click="openEditUser(scope.row)">编辑</el-button>
+                                        <el-button size="small" @click="openResetPassword(scope.row)">重置密码</el-button>
+                                        <el-button size="small" :type="scope.row.role==='admin'?'warning':'success'" @click="toggleUserRole(scope.row)">{{scope.row.role==='admin'?'取消管理':'设为管理'}}</el-button>
+                                        <el-button size="small" type="danger" v-if="scope.row.id!==currentUser.id" @click="confirmDeleteUser(scope.row.id)">删除</el-button>
+                                    </template>
+                                </el-table-column>
+                            </el-table>
+                        </div>
+                    </div>
+                    
+                    <!-- 消息推送 -->
+                    <div v-show="currentPage === 'webhook' && currentUser.role==='admin'">
+                        <el-tabs type="border-card">
+                            <!-- 企业微信配置 -->
+                            <el-tab-pane label="📱 企业微信 API">
+                                <el-form :model="wechatConfig" label-width="140px" style="max-width:600px">
+                                    <el-form-item label="启用企业微信推送">
+                                        <el-switch v-model="wechatConfig.enabled"></el-switch>
+                                    </el-form-item>
+                                    <el-form-item label="企业微信 API 地址">
+                                        <el-input v-model="wechatConfig.api_url" placeholder="https://qyapi.weixin.qq.com"></el-input>
+                                    </el-form-item>
+                                    <el-form-item label="CorpID">
+                                        <el-input v-model="wechatConfig.corp_id" placeholder="ww239ef8d083b060c3"></el-input>
+                                    </el-form-item>
+                                    <el-form-item label="Secret">
+                                        <el-input v-model="wechatConfig.secret" placeholder="EPMLrGD0_eHiiV9ECNVci16h0DXSXP9Bti7URVXMmwQ"></el-input>
+                                    </el-form-item>
+                                    <el-form-item label="AgentID">
+                                        <el-input-number v-model="wechatConfig.agent_id" :min="0" style="width:100%"></el-input-number>
+                                    </el-form-item>
+                                    <el-form-item label="Token">
+                                        <el-input v-model="wechatConfig.token" placeholder="KUhRNXvM"></el-input>
+                                    </el-form-item>
+                                    <el-form-item label="EncodingAESKey">
+                                        <el-input v-model="wechatConfig.encoding_aes_key" placeholder="nENwotH1z3MfPRrLt7REvweBhbOuhcPjNUicE3j83DK"></el-input>
+                                    </el-form-item>
+                                    <el-form-item>
+                                        <el-button type="primary" @click="saveWechatConfig">保存配置</el-button>
+                                        <el-button @click="testWechatPush">测试推送</el-button>
+                                    </el-form-item>
+                                    <el-alert title="使用说明" type="info" :closable="false" style="margin-top:20px">
+                                        <p>1. 在企业微信管理后台获取 CorpID 和 Secret</p>
+                                        <p>2. 创建自建应用，获取 AgentID</p>
+                                        <p>3. 用户管理 → 编辑用户 → 填写企业微信 ID（userid）</p>
+                                        <p>4. 启用推送后，审批结果会自动推送到个人</p>
+                                    </el-alert>
+                                </el-form>
+                            </el-tab-pane>
+                            
+                            <!-- Webhook 配置 -->
+                            <el-tab-pane label="🔗 Webhook 推送">
+                                <el-form :model="webhookForm" label-width="100px" style="max-width:600px">
+                                    <el-form-item label="启用推送"><el-switch v-model="webhookForm.enabled"></el-switch></el-form-item>
+                                    <el-form-item label="推送地址"><el-input v-model="webhookForm.url" placeholder="https://nh.dysobo.cn:888/api/service/notify"></el-input></el-form-item>
+                                    <el-form-item label="通道 ID"><el-input v-model="webhookForm.route_id" placeholder="route_skuo"></el-input></el-form-item>
+                                    <el-form-item label="通知类型">
+                                        <div style="display:flex;flex-direction:column;gap:10px">
+                                            <el-checkbox v-model="webhookForm.notify_time_off">调休申请</el-checkbox>
+                                            <el-checkbox v-model="webhookForm.notify_overtime">加班记录</el-checkbox>
+                                        </div>
+                                    </el-form-item>
+                                    <el-form-item>
+                                        <el-button type="primary" @click="saveWebhookConfig">保存配置</el-button>
+                                        <el-button @click="testWebhook">测试推送</el-button>
+                                    </el-form-item>
+                                </el-form>
+                            </el-tab-pane>
+                        </el-tabs>
+                    </div>
+                    
+                    <!-- 数据导出 -->
+                    <div v-show="currentPage === 'export' && currentUser.role==='admin'">
+                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px">
+                            <!-- 当月统计导出 -->
+                            <div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 2px 12px rgba(0,0,0,0.1)">
+                                <h3 style="margin-bottom:15px;color:#667eea">📊 当月统计导出</h3>
+                                <p style="color:#666;font-size:13px;margin-bottom:15px">导出当月调休、加班、出勤率统计报表（CSV 格式）</p>
+                                <div style="display:flex;gap:10px;margin-bottom:15px">
+                                    <el-select v-model="exportMonth" placeholder="月份" style="width:100px">
+                                        <el-option v-for="m in 12" :key="m" :label="m+'月'" :value="m"></el-option>
+                                    </el-select>
+                                    <el-select v-model="exportYear" placeholder="年份" style="width:100px">
+                                        <el-option v-for="y in [2025,2026,2027,2028]" :key="y" :label="y" :value="y"></el-option>
+                                    </el-select>
+                                </div>
+                                <el-button type="primary" @click="exportMonthlyStats" style="width:100%">📥 导出 CSV</el-button>
+                            </div>
+                            
+                            <!-- 数据备份 -->
+                            <div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 2px 12px rgba(0,0,0,0.1)">
+                                <h3 style="margin-bottom:15px;color:#f5576c">💾 数据备份</h3>
+                                <p style="color:#666;font-size:13px;margin-bottom:15px">备份所有数据（用户、排班、调休、加班）为 JSON 文件</p>
+                                <el-button type="primary" @click="exportBackup" style="width:100%;margin-bottom:10px">📤 导出备份</el-button>
+                                <el-button type="warning" @click="$refs.importFile.click()" style="width:100%">📥 导入恢复</el-button>
+                                <input type="file" ref="importFile" accept=".json" style="display:none" @change="importBackup">
+                            </div>
+                        </div>
+                        
+                        <!-- 使用说明 -->
+                        <div style="margin-top:20px;background:#fff;border-radius:12px;padding:20px;box-shadow:0 2px 12px rgba(0,0,0,0.1)">
+                            <h4 style="margin-bottom:10px;color:#333">📖 使用说明</h4>
+                            <ul style="color:#666;font-size:13px;line-height:2">
+                                <li><strong>当月统计导出：</strong>生成 CSV 格式的月度报表，包含调休汇总、加班汇总、出勤率统计</li>
+                                <li><strong>数据备份：</strong>导出所有数据为 JSON 文件，建议定期备份</li>
+                                <li><strong>数据恢复：</strong>从备份文件恢复数据，<strong style="color:red">注意：会清空现有数据！</strong></li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <!-- 修改密码 -->
+                    <div v-show="currentPage === 'password'">
+                        <el-form :model="passwordForm" label-width="80px" style="max-width:400px">
+                            <el-form-item label="当前密码"><el-input v-model="passwordForm.oldPassword" type="password"></el-input></el-form-item>
+                            <el-form-item label="新密码"><el-input v-model="passwordForm.newPassword" type="password"></el-input></el-form-item>
+                            <el-form-item label="确认密码"><el-input v-model="passwordForm.confirmPassword" type="password"></el-input></el-form-item>
+                            <el-form-item><el-button type="primary" @click="changePassword">修改密码</el-button></el-form-item>
+                        </el-form>
+                    </div>
+                    
+                    <!-- 排班对话框 -->
+                    <el-dialog v-model="showShiftDialog" :title="editingShiftId?'编辑排班':'添加排班'" width="380px">
+                        <el-form :model="shiftForm" label-width="70px">
+                            <el-form-item label="人员">
+                                <el-select v-model="shiftForm.user_id" placeholder="选择人员" style="width:100%" :disabled="!!editingShiftId">
+                                    <el-option v-for="u in users" :key="u.id" :label="u.name" :value="u.id"></el-option>
+                                </el-select>
+                            </el-form-item>
+                            <el-form-item label="日期">
+                                <el-date-picker v-model="shiftForm.date" type="date" placeholder="选择日期" style="width:100%" value-format="YYYY-MM-DD" :disabled="!!editingShiftId"></el-date-picker>
+                            </el-form-item>
+                            <el-form-item label="班次">
+                                <el-select v-model="shiftForm.shift_type" placeholder="选择班次" style="width:100%">
+                                    <el-option label="早班" value="早班"></el-option>
+                                    <el-option label="晚班" value="晚班"></el-option>
+                                    <el-option label="休息" value="休息"></el-option>
+                                </el-select>
+                            </el-form-item>
+                            <el-form-item label="备注">
+                                <el-input v-model="shiftForm.note" type="textarea" :rows="2"></el-input>
+                            </el-form-item>
+                        </el-form>
+                        <template #footer>
+                            <el-button @click="showShiftDialog=false">取消</el-button>
+                            <el-button type="primary" @click="saveShift">确定</el-button>
+                        </template>
+                    </el-dialog>
+                    
+                    <!-- 调休对话框 -->
+                    <el-dialog v-model="showTimeoffDialog" :title="editingTimeoffId?'编辑调休申请':'申请调休'" width="380px">
+                        <el-form :model="timeoffForm" label-width="70px">
+                            <el-form-item label="日期">
+                                <el-date-picker v-model="timeoffForm.date" type="date" placeholder="选择日期" style="width:100%" value-format="YYYY-MM-DD"></el-date-picker>
+                            </el-form-item>
+                            <el-form-item label="类型">
+                                <el-select v-model="timeoffForm.type" style="width:100%">
+                                    <el-option label="调休 U" value="U"></el-option>
+                                    <el-option label="病假 B" value="B"></el-option>
+                                    <el-option label="事假 S" value="S"></el-option>
+                                    <el-option label="婚假 H" value="H"></el-option>
+                                    <el-option label="产假 C" value="C"></el-option>
+                                    <el-option label="护理假 L" value="L"></el-option>
+                                    <el-option label="经期假 J" value="J"></el-option>
+                                    <el-option label="孕期假 Y" value="Y"></el-option>
+                                    <el-option label="哺乳假 R" value="R"></el-option>
+                                    <el-option label="年休假 N" value="N"></el-option>
+                                    <el-option label="探亲假 T" value="T"></el-option>
+                                    <el-option label="丧假 Z" value="Z"></el-option>
+                                </el-select>
+                            </el-form-item>
+                            <el-form-item label="时长">
+                                <el-input-number v-model="timeoffForm.hours" :min="0.5" :max="24" :step="0.5" style="width:100%"></el-input-number>
+                            </el-form-item>
+                            <el-form-item label="事由">
+                                <el-input v-model="timeoffForm.reason" type="textarea" :rows="2"></el-input>
+                            </el-form-item>
+                        </el-form>
+                        <template #footer>
+                            <el-button @click="showTimeoffDialog=false">取消</el-button>
+                            <el-button type="primary" @click="saveTimeoff">确定</el-button>
+                        </template>
+                    </el-dialog>
+                    
+                    <!-- 审批对话框 - 调休 -->
+                    <el-dialog v-model="showApproveTimeoffDialog" title="审批调休申请" width="380px">
+                        <div style="margin-bottom:15px">
+                            <div style="color:#666;margin-bottom:8px">申请人：<strong>{{ approveForm.user_name }}</strong></div>
+                            <div style="color:#666;margin-bottom:8px">类型：<strong>{{ approveForm.type_name }}</strong></div>
+                            <div style="color:#666;margin-bottom:8px">日期：<strong>{{ approveForm.date }}</strong></div>
+                            <div style="color:#666;margin-bottom:8px">时长：<strong>{{ approveForm.hours }} 小时</strong></div>
+                            <div style="color:#666;margin-bottom:8px">事由：<strong>{{ approveForm.reason || '无' }}</strong></div>
+                        </div>
+                        <el-divider></el-divider>
+                        <el-form label-width="70px">
+                            <el-form-item label="审批留言">
+                                <el-input v-model="approveForm.admin_comment" type="textarea" :rows="2" placeholder="可选：填写审批意见或说明"></el-input>
+                            </el-form-item>
+                        </el-form>
+                        <template #footer>
+                            <el-button @click="showApproveTimeoffDialog=false">取消</el-button>
+                            <el-button type="danger" @click="doApproveTimeoff(false)">拒绝</el-button>
+                            <el-button type="primary" @click="doApproveTimeoff(true)">批准</el-button>
+                        </template>
+                    </el-dialog>
+                    
+                    <!-- 审批对话框 - 加班 -->
+                    <el-dialog v-model="showApproveOvertimeDialog" title="确认加班记录" width="380px">
+                        <div style="margin-bottom:15px">
+                            <div style="color:#666;margin-bottom:8px">申请人：<strong>{{ approveForm.user_name }}</strong></div>
+                            <div style="color:#666;margin-bottom:8px">日期：<strong>{{ approveForm.date }}</strong></div>
+                            <div style="color:#666;margin-bottom:8px">时长：<strong>{{ approveForm.hours }} 小时</strong></div>
+                            <div style="color:#666;margin-bottom:8px">事由：<strong>{{ approveForm.reason || '无' }}</strong></div>
+                        </div>
+                        <el-divider></el-divider>
+                        <el-form label-width="70px">
+                            <el-form-item label="审批留言">
+                                <el-input v-model="approveForm.admin_comment" type="textarea" :rows="2" placeholder="可选：填写确认意见或说明"></el-input>
+                            </el-form-item>
+                        </el-form>
+                        <template #footer>
+                            <el-button @click="showApproveOvertimeDialog=false">取消</el-button>
+                            <el-button type="danger" @click="doApproveOvertime(false)">拒绝</el-button>
+                            <el-button type="primary" @click="doApproveOvertime(true)">确认</el-button>
+                        </template>
+                    </el-dialog>
+                    
+                    <!-- 加班对话框 -->
+                    <el-dialog v-model="showOvertimeDialog" :title="editingOvertimeId?'编辑加班记录':'登记加班'" width="380px">
+                        <el-form :model="overtimeForm" label-width="70px">
+                            <el-form-item label="日期">
+                                <el-date-picker v-model="overtimeForm.date" type="date" placeholder="选择日期" style="width:100%" value-format="YYYY-MM-DD"></el-date-picker>
+                            </el-form-item>
+                            <el-form-item label="时长">
+                                <el-input-number v-model="overtimeForm.hours" :min="0.5" :max="24" :step="0.5" style="width:100%"></el-input-number>
+                            </el-form-item>
+                            <el-form-item label="事由">
+                                <el-input v-model="overtimeForm.reason" type="textarea" :rows="2"></el-input>
+                            </el-form-item>
+                        </el-form>
+                        <template #footer>
+                            <el-button @click="showOvertimeDialog=false">取消</el-button>
+                            <el-button type="primary" @click="saveOvertime">确定</el-button>
+                        </template>
+                    </el-dialog>
+                    
+                    <!-- 用户对话框 -->
+                    <el-dialog v-model="showUserDialog" :title="editingUserId ? '编辑用户' : '添加用户'" width="380px">
+                        <el-form :model="userForm" label-width="80px">
+                            <el-form-item label="用户名">
+                                <el-input v-model="userForm.name" placeholder="请输入用户名"></el-input>
+                            </el-form-item>
+                            <el-form-item label="密码" v-if="!editingUserId">
+                                <el-input v-model="userForm.password" type="password" placeholder="请输入密码"></el-input>
+                            </el-form-item>
+                            <el-form-item label="角色">
+                                <el-select v-model="userForm.role" style="width:100%">
+                                    <el-option label="组员" value="member"></el-option>
+                                    <el-option label="管理员" value="admin"></el-option>
+                                </el-select>
+                            </el-form-item>
+                            <el-form-item label="联系方式">
+                                <el-input v-model="userForm.phone" placeholder="请输入手机号（可选）"></el-input>
+                            </el-form-item>
+                            <el-form-item label="企业微信 ID">
+                                <el-input v-model="userForm.wechat_user_id" placeholder="企业微信用户 ID（用于推送）"></el-input>
+                            </el-form-item>
+                            <el-form-item label="启用推送">
+                                <el-switch v-model="userForm.enable_push"></el-switch>
+                            </el-form-item>
+                        </el-form>
+                        <template #footer>
+                            <el-button @click="showUserDialog=false">取消</el-button>
+                            <el-button type="primary" @click="saveUser">确定</el-button>
+                        </template>
+                    </el-dialog>
                 </div>
             </div>
         </div>
     </div>
+    
+    <!-- 版本号 -->
+    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V3.3.2</a>
     
     <script>
         const API_BASE = '/kq/api';
@@ -143,100 +844,618 @@
         createApp({
             setup() {
                 const currentUser = ref(null);
-                const loading = ref(false);
                 const currentPage = ref('dashboard');
+                const menuOpen = ref(false);
                 const loginForm = ref({ name: '', password: '' });
-                const rememberMe = ref(false);
                 const users = ref([]);
                 const shifts = ref([]);
                 const timeoffList = ref([]);
                 const overtimeList = ref([]);
                 const myStats = ref({});
-                const quickTimeoffForm = ref({ date: new Date().toISOString().split('T')[0], hours: 1, reason: '个人事务' });
+                const webhookForm = ref({ enabled: false, url: '', route_id: '', notify_time_off: true, notify_overtime: true });
+                const wechatConfig = ref({ enabled: false, api_url: 'https://qyapi.weixin.qq.com', corp_id: '', secret: '', agent_id: 1000006, token: '', encoding_aes_key: '' });
+                const passwordForm = ref({ oldPassword: '', newPassword: '', confirmPassword: '' });
+                const exportMonth = ref(new Date().getMonth() + 1);
+                const exportYear = ref(new Date().getFullYear());
+                const importFile = ref(null);
+                const showShiftDialog = ref(false);
+                const showTimeoffDialog = ref(false);
+                const showOvertimeDialog = ref(false);
+                const showUserDialog = ref(false);
+                const shiftForm = ref({ user_id: null, date: '', shift_type: '', note: '' });
+                const timeoffForm = ref({ date: '', hours: 4, type: 'U', reason: '' });
+                const overtimeForm = ref({ date: '', hours: 1, reason: '' });
+                const userForm = ref({ name: '', password: '', role: 'member', phone: '', wechat_user_id: '', enable_push: true });
+                const editingShiftId = ref(null);
+                const editingTimeoffId = ref(null);
+                const editingOvertimeId = ref(null);
+                const editingUserId = ref(null);
+                
+                const openEditUser = (user) => {
+                    editingUserId.value = user.id;
+                    userForm.value = { 
+                        name: user.name, 
+                        password: '', 
+                        role: user.role, 
+                        phone: user.phone || '',
+                        wechat_user_id: user.wechat_user_id || '',
+                        enable_push: user.enable_push !== false
+                    };
+                    showUserDialog.value = true;
+                };
                 
                 const pageTitle = computed(() => ({ dashboard:'📊 仪表盘', shifts:'📅 排班管理', timeoff:'🏖️ 调休申请', overtime:'⏰ 加班记录', users:'👥 用户管理', webhook:'🔔 消息推送', password:'🔑 修改密码' })[currentPage.value] || '考勤管理');
                 
                 const recentShifts = computed(() => {
+                    if (!currentUser.value) return [];
                     const today = new Date();
-                    const future30Days = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
+                    today.setHours(0, 0, 0, 0);
+                    const future30Days = new Date(today.getTime() + 29 * 24 * 60 * 60 * 1000);
+                    const myId = Number(currentUser.value.id);
+                    
+                    // 管理员显示所有人的排班，组员只显示自己的
+                    if (currentUser.value.role === 'admin') {
+                        return shifts.value.filter(s => {
+                            const d = new Date(s.date);
+                            return d >= today && d <= future30Days;
+                        }).sort((a, b) => new Date(a.date) - new Date(b.date) || a.user_name.localeCompare(b.user_name));
+                    } else {
+                        return shifts.value.filter(s => {
+                            const d = new Date(s.date);
+                            return d >= today && d <= future30Days && Number(s.user_id) === myId;
+                        }).sort((a, b) => new Date(a.date) - new Date(b.date));
+                    }
+                });
+                
+                const myShifts = computed(() => {
+                    if (!currentUser.value) return [];
+                    const today = new Date();
+                    const past3Months = new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000);
+                    const future1Month = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
+                    const myId = Number(currentUser.value.id);
                     return shifts.value.filter(s => {
                         const d = new Date(s.date);
-                        return d >= today && d <= future30Days;
+                        return d >= past3Months && d <= future1Month && Number(s.user_id) === myId;
                     }).sort((a, b) => new Date(a.date) - new Date(b.date));
                 });
                 
+                // 班组排班 - 今日往后 30 天
+                const teamShifts = computed(() => {
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    const future30Days = new Date(today.getTime() + 29 * 24 * 60 * 60 * 1000);
+                    return shifts.value.filter(s => {
+                        const d = new Date(s.date);
+                        return d >= today && d <= future30Days;
+                    }).sort((a, b) => new Date(a.date) - new Date(b.date) || a.user_name.localeCompare(b.user_name));
+                });
+                
+                // 热力图数据
+                const months = ['1 月', '2 月', '3 月', '4 月', '5 月', '6 月', '7 月', '8 月', '9 月', '10 月', '11 月', '12 月'];
+                const tooltip = ref({ visible: false, x: 0, y: 0, date: '', type: null, typeText: '', hours: 0, reason: '', color: '' });
+                const CELL_SIZE = 14; // 12px cell + 2px gap
+                
+                const monthLabels = computed(() => {
+                    const firstWeek = weekData.value[0];
+                    if (!firstWeek) return months;
+                    const firstDay = firstWeek.days.find(d => d !== null);
+                    if (!firstDay) return months;
+                    const startMonth = new Date(firstDay.date).getMonth();
+                    return months.slice(startMonth);
+                });
+                
+                const monthWidths = computed(() => {
+                    const weeks = weekData.value;
+                    if (weeks.length === 0) return Array(12).fill(80);
+                    
+                    const firstWeek = weeks[0];
+                    const firstDay = firstWeek.days.find(d => d !== null);
+                    if (!firstDay) return Array(12).fill(80);
+                    
+                    const startMonth = new Date(firstDay.date).getMonth();
+                    const widths = [];
+                    
+                    // 统计每个月的周数(按周的中心日期判断归属)
+                    const monthWeekCount = {};
+                    weeks.forEach(week => {
+                        const validDays = week.days.filter(d => d !== null);
+                        if (validDays.length > 0) {
+                            // 取该周中间日期判断月份
+                            const midDay = validDays[Math.floor(validDays.length / 2)];
+                            const month = new Date(midDay.date).getMonth();
+                            monthWeekCount[month] = (monthWeekCount[month] || 0) + 1;
+                        }
+                    });
+                    
+                    // 按月份顺序生成宽度
+                    for (let m = 0; m < 12 - startMonth; m++) {
+                        const monthIndex = startMonth + m;
+                        const weekCount = monthWeekCount[monthIndex] || 0;
+                        // 宽度 = 周数 × (格子宽度 + 间隙) = 周数 × 14px
+                        const width = weekCount * CELL_SIZE;
+                        if (width > 0) {
+                            widths.push(width);
+                        }
+                    }
+                    
+                    return widths;
+                });
+                
+                const weekData = computed(() => {
+                    const year = new Date().getFullYear();
+                    const weeks = [];
+                    const firstDay = new Date(year, 0, 1);
+                    const lastDay = new Date(year, 11, 31);
+                    let currentWeekStart = new Date(firstDay);
+                    currentWeekStart.setDate(currentWeekStart.getDate() - firstDay.getDay());
+                    
+                    // 合并加班和调休数据
+                    const allRecords = {};
+                    
+                    // 先处理加班记录
+                    overtimeList.value.forEach(r => {
+                        if (r.status === 'approved') {
+                            allRecords[r.date] = { 
+                                type: 'overtime', 
+                                hours: r.hours, 
+                                reason: r.reason || '',
+                                overtimeHours: r.hours  // ← 保存原始加班时长
+                            };
+                        }
+                    });
+                    
+                    // 再处理假期记录（所有 12 种类型）
+                    timeoffList.value.forEach(r => {
+                        if (r.status === 'approved') {
+                            if (allRecords[r.date] && allRecords[r.date].type === 'overtime') {
+                                // 当天已有加班 → 合并为 both
+                                const existing = allRecords[r.date];
+                                allRecords[r.date] = { 
+                                    type: 'both',  // 混合类型
+                                    hours: existing.hours + r.hours,  // 累计时长
+                                    reason: (existing.reason || '') + ' + ' + (r.reason || ''),
+                                    overtimeHours: existing.overtimeHours,  // ← 使用保存的原始值
+                                    leaveHours: (existing.leaveHours || 0) + r.hours  // ← 累加假期时长
+                                };
+                            } else if (allRecords[r.date] && allRecords[r.date].type === 'leave') {
+                                // 当天已有假期 → 累加假期时长
+                                const existing = allRecords[r.date];
+                                allRecords[r.date] = { 
+                                    type: 'leave',  // 保持假期类型
+                                    hours: existing.hours + r.hours,  // 累计时长
+                                    reason: (existing.reason || '') + ' + ' + (r.reason || ''),
+                                    leaveHours: (existing.leaveHours || 0) + r.hours  // ← 累加假期时长
+                                };
+                            } else {
+                                // 当天没有记录 → 只记录假期
+                                allRecords[r.date] = { type: 'leave', hours: r.hours, reason: r.reason || '', leaveHours: r.hours };
+                            }
+                        }
+                    });
+                    
+                    while (currentWeekStart <= lastDay) {
+                        const week = { days: [] };
+                        for (let i = 0; i < 7; i++) {
+                            const date = new Date(currentWeekStart);
+                            date.setDate(date.getDate() + i);
+                            const dateStr = formatDate(date);
+                            const isCurrentYear = date.getFullYear() === year;
+                            if (isCurrentYear) {
+                                const info = allRecords[dateStr];
+                                week.days.push(info ? { 
+                                    date: dateStr, 
+                                    type: info.type, 
+                                    hours: info.hours, 
+                                    reason: info.reason,
+                                    overtimeHours: info.overtimeHours,
+                                    leaveHours: info.leaveHours
+                                } : { date: dateStr, type: null, hours: 0 });
+                            } else {
+                                week.days.push(null);
+                            }
+                        }
+                        weeks.push(week);
+                        currentWeekStart.setDate(currentWeekStart.getDate() + 7);
+                    }
+                    return weeks;
+                });
+                
+                function formatDate(date) {
+                    const y = date.getFullYear();
+                    const m = String(date.getMonth() + 1).padStart(2, '0');
+                    const d = String(date.getDate()).padStart(2, '0');
+                    return `${y}-${m}-${d}`;
+                }
+                
+                function formatDisplayDate(dateStr) {
+                    const [y, m, d] = dateStr.split('-');
+                    return `${y}年${parseInt(m)}月${parseInt(d)}日`;
+                }
+                
+                function getColorLevel(hours) {
+                    if (hours <= 0) return 0;
+                    if (hours <= 2) return 1;
+                    if (hours <= 4) return 2;
+                    if (hours <= 6) return 3;
+                    return 4;
+                }
+                
+                function getCellClass(day) {
+                    if (!day || !day.type) return '';
+                    const level = getColorLevel(day.hours);
+                    return `cell-${day.type}-${level}`;
+                }
+                
+                function getColor(type, hours) {
+                    const colors = {
+                        overtime: ['#ebedf0', '#9be9a8', '#40c463', '#30a14e', '#216e39'],
+                        leave: ['#ebedf0', '#fff4b8', '#ffe066', '#ffc107', '#ff9800'],
+                        both: ['#ebedf0', '#b39ddb', '#9575cd', '#7e57c2', '#673ab7']  // 紫色
+                    };
+                    return colors[type][getColorLevel(hours)];
+                }
+                
+                function showTooltip(event, day) {
+                    if (!day) return;
+                    let typeText = '';
+                    let detailText = '';
+                    
+                    if (day.type === 'both') {
+                        typeText = '加班 + 假期';
+                        detailText = `加班 ${day.overtimeHours}h + 假期 ${day.leaveHours}h`;
+                    } else if (day.type === 'overtime') {
+                        typeText = '加班';
+                        detailText = `${day.hours}小时`;
+                    } else if (day.type === 'leave') {
+                        typeText = '假期';
+                        detailText = `${day.hours}小时`;
+                    }
+                    
+                    tooltip.value = {
+                        visible: true,
+                        x: event.clientX + 10,
+                        y: event.clientY + 10,
+                        date: formatDisplayDate(day.date),
+                        type: day.type,
+                        typeText: detailText,  // ← 使用 detailText，不是 typeText
+                        hours: day.hours,
+                        reason: day.reason || '',
+                        color: day.type ? getColor(day.type, day.hours) : '#ebedf0'
+                    };
+                }
+                
+                function hideTooltip() {
+                    tooltip.value.visible = false;
+                }
+                
                 const api = async (endpoint, options = {}) => {
-                    try {
-                        const token = localStorage.getItem('token');
-                        const headers = { 'Content-Type': 'application/json' };
-                        if (token) headers['Authorization'] = 'Bearer ' + token;
-                        const res = await fetch(API_BASE + endpoint, { ...options, headers });
-                        const data = await res.json();
-                        if (res.status === 401) { localStorage.removeItem('token'); currentUser.value = null; }
-                        if (!res.ok) throw new Error(data.detail || '请求失败');
-                        return data;
-                    } catch (err) { console.error('API 错误:', err); throw err; }
+                    const token = localStorage.getItem('token');
+                    const headers = { 'Content-Type': 'application/json' };
+                    if (token) headers['Authorization'] = 'Bearer ' + token;
+                    const res = await fetch(API_BASE + endpoint, { ...options, headers });
+                    const data = await res.json();
+                    if (res.status === 401) { localStorage.removeItem('token'); currentUser.value = null; }
+                    if (!res.ok) throw new Error(data.detail || '请求失败');
+                    return data;
                 };
                 
                 const handleLogin = async () => {
-                    if (!loginForm.value.name || !loginForm.value.password) { ElementPlus.ElMessage.warning('请输入用户名和密码'); return; }
-                    loading.value = true;
-                    try {
-                        const data = await api('/login', { method: 'POST', body: JSON.stringify(loginForm.value) });
-                        localStorage.setItem('token', data.token);
-                        if (rememberMe.value) localStorage.setItem('rememberedUser', loginForm.value.name);
-                        else localStorage.removeItem('rememberedUser');
-                        currentUser.value = data.user;
-                        await loadData();
-                        ElementPlus.ElMessage.success('登录成功');
-                    } catch (err) { ElementPlus.ElMessage.error(err.message); }
-                    finally { loading.value = false; }
+                    const data = await api('/login', { method: 'POST', body: JSON.stringify(loginForm.value) });
+                    localStorage.setItem('token', data.token);
+                    currentUser.value = data.user;
+                    await loadData();
                 };
                 
-                const handleLogout = () => { localStorage.removeItem('token'); currentUser.value = null; ElementPlus.ElMessage.success('已退出登录'); };
+                const handleLogout = () => { localStorage.removeItem('token'); currentUser.value = null; };
                 
                 const loadData = async () => {
-                    try {
-                        const stats = await api('/stats/my-summary');
-                        const u = await api('/users');
-                        myStats.value = stats;
-                        users.value = u;
-                        if (currentUser.value.role === 'admin') {
-                            const [s, t, o] = await Promise.all([api('/shifts'), api('/time-off'), api('/overtime')]);
-                            shifts.value = s; timeoffList.value = t; overtimeList.value = o;
-                        } else {
-                            const uid = currentUser.value.id;
-                            const [s, t, o] = await Promise.all([api('/shifts?user_id='+uid), api('/time-off?user_id='+uid), api('/overtime?user_id='+uid)]);
-                            shifts.value = s; timeoffList.value = t; overtimeList.value = o;
-                        }
-                    } catch(e) { console.error('加载失败:',e); ElementPlus.ElMessage.error('加载数据失败'); }
+                    // 管理员调用 /stats/summary 获取组员总和，组员调用 /stats/my-summary 获取自己的数据
+                    const stats = await api('/stats/summary');
+                    const u = await api('/users');
+                    myStats.value = stats;
+                    users.value = u;
+                    if (currentUser.value.role === 'admin') {
+                        const [s, t, o] = await Promise.all([api('/shifts'), api('/time-off'), api('/overtime')]);
+                        shifts.value = s; timeoffList.value = t; overtimeList.value = o;
+                        // 加载 webhook 配置
+                        const webhookConfig = await api('/webhook/config');
+                        webhookForm.value = webhookConfig;
+                        // 加载企业微信配置
+                        const wechatCfg = await api('/wechat/config');
+                        wechatConfig.value = wechatCfg;
+                    } else {
+                        const uid = currentUser.value.id;
+                        // 组员加载自己的排班 + 班组排班（便于联系他人）
+                        const [myS, teamS, t, o] = await Promise.all([
+                            api('/shifts?user_id='+uid),
+                            api('/shifts/team'),
+                            api('/time-off?user_id='+uid),
+                            api('/overtime?user_id='+uid)
+                        ]);
+                        // 合并去重
+                        shifts.value = [...myS, ...teamS].reduce((acc, cur) => {
+                            if (!acc.find(item => item.id === cur.id)) acc.push(cur);
+                            return acc;
+                        }, []).sort((a, b) => new Date(a.date) - new Date(b.date));
+                        timeoffList.value = t;
+                        overtimeList.value = o;
+                    }
                 };
                 
-                const submitQuickTimeoff = async () => {
+                // 审批相关状态
+                const showApproveTimeoffDialog = Vue.ref(false);
+                const showApproveOvertimeDialog = Vue.ref(false);
+                const approveForm = Vue.ref({ id: null, user_name: "", type_name: "", date: "", hours: 0, reason: "", admin_comment: "" });
+                
+                // 打开调休审批对话框
+                const openApproveTimeoff = (row) => {
+                    const typeNames = {"U":"调休","B":"病假","S":"事假","H":"婚假","C":"产假","L":"护理假","J":"经期假","Y":"孕期假","R":"哺乳假","N":"年休假","T":"探亲假","Z":"丧假"};
+                    approveForm.value = {
+                        id: row.id,
+                        user_name: row.user_name,
+                        type_name: typeNames[row.type] || row.type,
+                        date: row.date,
+                        hours: row.hours,
+                        reason: row.reason,
+                        admin_comment: ""
+                    };
+                    showApproveTimeoffDialog.value = true;
+                };
+                
+                // 执行调休审批
+                const doApproveTimeoff = async (ok) => {
+                    await api('/time-off/'+approveForm.value.id+'/approve', {
+                        method: 'POST',
+                        body: JSON.stringify({ approved: ok, admin_comment: approveForm.value.admin_comment })
+                    });
+                    showApproveTimeoffDialog.value = false;
+                    await loadData();
+                };
+                
+                // 打开加班审批对话框
+                const openApproveOvertime = (row) => {
+                    approveForm.value = {
+                        id: row.id,
+                        user_name: row.user_name,
+                        date: row.date,
+                        hours: row.hours,
+                        reason: row.reason,
+                        admin_comment: ""
+                    };
+                    showApproveOvertimeDialog.value = true;
+                };
+                
+                // 执行加班审批
+                const doApproveOvertime = async (ok) => {
+                    await api('/overtime/'+approveForm.value.id+'/approve', {
+                        method: 'POST',
+                        body: JSON.stringify({ approved: ok, admin_comment: approveForm.value.admin_comment })
+                    });
+                    showApproveOvertimeDialog.value = false;
+                    await loadData();
+                };
+                
+                const saveTimeoff = async () => {
+                    const d = timeoffForm.value.date.split('T')[0];
+                    if(editingTimeoffId.value) {
+                        await api('/time-off/'+editingTimeoffId.value, { method: 'PUT', body: JSON.stringify({ date: d, hours: timeoffForm.value.hours, type: timeoffForm.value.type, reason: timeoffForm.value.reason }) });
+                    } else {
+                        await api('/time-off', { method: 'POST', body: JSON.stringify({ date: d, hours: timeoffForm.value.hours, type: timeoffForm.value.type, reason: timeoffForm.value.reason }) });
+                    }
+                    showTimeoffDialog.value = false;
+                    await loadData();
+                };
+                
+                const saveOvertime = async () => {
+                    const d = overtimeForm.value.date.split('T')[0];
+                    if(editingOvertimeId.value) {
+                        await api('/overtime/'+editingOvertimeId.value, { method: 'PUT', body: JSON.stringify({ date: d, hours: overtimeForm.value.hours, reason: overtimeForm.value.reason }) });
+                    } else {
+                        await api('/overtime', { method: 'POST', body: JSON.stringify({ date: d, hours: overtimeForm.value.hours, reason: overtimeForm.value.reason }) });
+                    }
+                    showOvertimeDialog.value = false;
+                    await loadData();
+                };
+                
+                const saveUser = async () => {
+                    if (editingUserId.value) {
+                        // 编辑用户
+                        await api('/users/'+editingUserId.value, { method: 'PUT', body: JSON.stringify(userForm.value) });
+                    } else {
+                        // 添加用户
+                        await api('/users', { method: 'POST', body: JSON.stringify(userForm.value) });
+                    }
+                    showUserDialog.value = false;
+                    editingUserId.value = null;
+                    await loadData();
+                };
+                
+                const openEditTimeoff = (row) => { editingTimeoffId.value = row.id; timeoffForm.value = { date: row.date, hours: row.hours, type: row.type || 'U', reason: row.reason }; showTimeoffDialog.value = true; };
+                const openEditOvertime = (row) => { editingOvertimeId.value = row.id; overtimeForm.value = { date: row.date, hours: row.hours, reason: row.reason }; showOvertimeDialog.value = true; };
+                
+                const confirmDeleteTimeoff = async (id) => { if(confirm('确定删除？')) { await api('/time-off/'+id, { method: 'DELETE' }); await loadData(); } };
+                const confirmDeleteOvertime = async (id) => { if(confirm('确定删除？')) { await api('/overtime/'+id, { method: 'DELETE' }); await loadData(); } };
+                const confirmDeleteUser = async (id) => { if(confirm('确定删除？')) { await api('/users/'+id, { method: 'DELETE' }); await loadData(); } };
+                const confirmDeleteShift = async (id) => { if(confirm('确定删除？')) { await api('/shifts/'+id, { method: 'DELETE' }); await loadData(); } };
+                
+                const openShiftDialog = (edit, row) => {
+                    editingShiftId.value = row ? row.id : null;
+                    shiftForm.value = row ? { user_id: row.user_id, date: row.date, shift_type: row.shift_type, note: row.note||'' } : { user_id: null, date: new Date().toISOString().split('T')[0], shift_type: '', note: '' };
+                    showShiftDialog.value = true;
+                };
+                
+                const saveShift = async () => {
+                    if(!shiftForm.value.user_id) { alert('请选择人员'); return; }
+                    const d = shiftForm.value.date.split('T')[0];
+                    if(editingShiftId.value) {
+                        await api('/shifts/'+editingShiftId.value, { method: 'PUT', body: JSON.stringify({ shift_type: shiftForm.value.shift_type, note: shiftForm.value.note }) });
+                    } else {
+                        await api('/shifts', { method: 'POST', body: JSON.stringify({ user_id: shiftForm.value.user_id, date: d, shift_type: shiftForm.value.shift_type, note: shiftForm.value.note }) });
+                    }
+                    showShiftDialog.value = false;
+                    await loadData();
+                };
+                
+                const toggleUserRole = async (user) => { await api('/users/'+user.id+'/role', { method: 'PUT', body: JSON.stringify({ role: user.role==='admin'?'member':'admin' }) }); await loadData(); };
+                const openResetPassword = async (user) => { await api('/users/'+user.id+'/reset-password', { method: 'POST', body: JSON.stringify({ password: '123456' }) }); alert('密码已重置为 123456'); };
+                
+                const saveWebhookConfig = async () => { await api('/webhook/config', { method: 'POST', body: JSON.stringify(webhookForm.value) }); alert('配置已保存'); };
+                const testWebhook = async () => { await api('/webhook/test', { method: 'POST', body: JSON.stringify({ title: '测试', content: '测试消息' }) }); alert('测试推送已发送'); };
+                
+                // 企业微信配置
+                const saveWechatConfig = async () => {
+                    await api('/wechat/config', { method: 'POST', body: JSON.stringify(wechatConfig.value) });
+                    alert('企业微信配置已保存');
+                };
+                
+                const testWechatPush = async () => {
                     try {
-                        const d = quickTimeoffForm.value.date.split('T')[0];
-                        await api('/time-off', { method: 'POST', body: JSON.stringify({ date: d, hours: quickTimeoffForm.value.hours, reason: quickTimeoffForm.value.reason || '个人事务' }) });
-                        ElementPlus.ElMessage.success('🏖️ 调休申请已提交！');
-                        quickTimeoffForm.value = { date: new Date().toISOString().split('T')[0], hours: 1, reason: '个人事务' };
-                        await loadData();
-                    } catch(e) { ElementPlus.ElMessage.error(e.message); }
+                        const result = await api('/wechat/test-push', { method: 'POST', body: JSON.stringify({ title: '测试推送', content: '这是一条测试消息', link: 'http://x.dysobo.cn:8888/kq/' }) });
+                        alert(result.message || '测试推送已发送');
+                    } catch (e) {
+                        alert('测试失败：' + e.message);
+                    }
+                };
+                
+                // 导出功能
+                const exportMonthlyStats = async () => {
+                    try {
+                        const token = localStorage.getItem('token');
+                        const response = await fetch('/kq/api/export/monthly?month=' + exportMonth.value + '&year=' + exportYear.value, {
+                            headers: {
+                                'Authorization': 'Bearer ' + token
+                            }
+                        });
+                        
+                        const contentType = response.headers.get('content-type');
+                        if (contentType && contentType.includes('text/html')) {
+                            throw new Error('认证失败，请重新登录');
+                        }
+                        
+                        if (!response.ok) {
+                            const err = await response.json().catch(() => ({ detail: '导出失败' }));
+                            throw new Error(err.detail || '导出失败');
+                        }
+                        
+                        const result = await response.json();
+                        const blob = new Blob([result.data], { type: 'text/csv;charset=utf-8;' });
+                        const link = document.createElement('a');
+                        link.href = URL.createObjectURL(blob);
+                        link.download = result.filename || '考勤统计_' + exportYear.value + '年' + exportMonth.value + '月.csv';
+                        link.click();
+                        alert('✅ 导出成功');
+                    } catch (e) {
+                        alert('❌ 导出失败：' + e.message);
+                    }
+                };
+                
+                const exportBackup = async () => {
+                    try {
+                        const response = await api('/backup/export');
+                        const blob = new Blob([JSON.stringify(response.data, null, 2)], { type: 'application/json' });
+                        const link = document.createElement('a');
+                        link.href = URL.createObjectURL(blob);
+                        link.download = response.filename || `考勤备份_${new Date().toISOString().slice(0,10)}.json`;
+                        link.click();
+                        alert('✅ 备份成功');
+                    } catch (e) {
+                        alert('❌ 备份失败：' + e.message);
+                    }
+                };
+                
+                const importBackup = async (event) => {
+                    const file = event.target.files[0];
+                    if (!file) return;
+                    
+                    if (!confirm('⚠️ 警告：导入操作会清空现有数据！确定要继续吗？')) {
+                        event.target.value = '';
+                        return;
+                    }
+                    
+                    try {
+                        const reader = new FileReader();
+                        reader.onload = async (e) => {
+                            try {
+                                const backupData = JSON.parse(e.target.result);
+                                const result = await api('/backup/import', { method: 'POST', body: JSON.stringify(backupData) });
+                                alert('✅ 恢复成功！\\n' + JSON.stringify(result.count, null, 2));
+                                await loadData();
+                            } catch (err) {
+                                alert('❌ 恢复失败：' + err.message);
+                            }
+                        };
+                        reader.readAsText(file);
+                    } catch (e) {
+                        alert('❌ 读取文件失败：' + e.message);
+                    } finally {
+                        event.target.value = '';
+                    }
+                };
+                
+                const changePassword = async () => { await api('/auth/change-password', { method: 'POST', body: JSON.stringify(passwordForm.value) }); alert('密码修改成功'); };
+                
+                const loadUserInfo = async () => {
+                    try {
+                        const u = await api('/users');
+                        const me = u.find(user => Number(user.id) === Number(currentUser.value.id));
+                        if (me) {
+                            currentUser.value.name = me.name;
+                        }
+                    } catch(e) { console.error('加载用户信息失败:', e); }
                 };
                 
                 onMounted(() => {
                     const token = localStorage.getItem('token');
                     if (token) {
-                        try {
-                            const payload = JSON.parse(atob(token.split('.')[1]));
-                            if (payload.exp && payload.exp*1000 < Date.now()) { localStorage.removeItem('token'); return; }
-                            currentUser.value = { id: payload.sub, name: '用户', role: payload.role };
-                            loadData();
-                        } catch(e) { localStorage.removeItem('token'); }
+                        const payload = JSON.parse(atob(token.split('.')[1]));
+                        currentUser.value = { id: payload.sub, name: '用户', role: payload.role };
+                        loadData().then(() => {
+                            loadUserInfo();
+                            // 检查 URL 参数，支持从推送消息直接跳转和快捷方式
+                            const urlParams = new URLSearchParams(window.location.search);
+                            const page = urlParams.get('page');
+                            const recordId = urlParams.get('id');
+                            const action = urlParams.get('action');
+                            
+                            // 快捷方式：?action=tx 直接打开调休申请对话框
+                            if (action === 'tx') {
+                                currentPage.value = 'timeoff';
+                                setTimeout(() => {
+                                    showTimeoffDialog.value = true;
+                                }, 500);
+                            }
+                            // 快捷方式：?action=jj 直接打开加班申请对话框
+                            else if (action === 'jj') {
+                                currentPage.value = 'overtime';
+                                setTimeout(() => {
+                                    showOvertimeDialog.value = true;
+                                }, 500);
+                            }
+                            // 管理员审批跳转
+                            else if (page && recordId && currentUser.value.role === 'admin') {
+                                if (page === 'timeoff') {
+                                    currentPage.value = 'timeoff';
+                                    setTimeout(() => {
+                                        const row = timeoffList.value.find(r => r.id == recordId);
+                                        if (row) {
+                                            openApproveTimeoff(row);
+                                        }
+                                    }, 500);
+                                } else if (page === 'overtime') {
+                                    currentPage.value = 'overtime';
+                                    setTimeout(() => {
+                                        const row = overtimeList.value.find(r => r.id == recordId);
+                                        if (row) {
+                                            openApproveOvertime(row);
+                                        }
+                                    }, 500);
+                                }
+                            }
+                        });
                     }
-                    const ru = localStorage.getItem('rememberedUser');
-                    if (ru) { loginForm.value.name = ru; rememberMe.value = true; }
                 });
                 
-                return { currentUser, loading, currentPage, loginForm, rememberMe, users, shifts, timeoffList, overtimeList, myStats, quickTimeoffForm, pageTitle, recentShifts, handleLogin, handleLogout, loadData, submitQuickTimeoff };
+                return { currentUser, currentPage, menuOpen, loginForm, users, shifts, timeoffList, overtimeList, myStats, webhookForm, wechatConfig, passwordForm, exportMonth, exportYear, importFile, showShiftDialog, showTimeoffDialog, showOvertimeDialog, showUserDialog, showApproveTimeoffDialog, showApproveOvertimeDialog, shiftForm, timeoffForm, overtimeForm, userForm, approveForm, pageTitle, recentShifts, myShifts, teamShifts, months, monthLabels, monthWidths, weekData, tooltip, handleLogin, handleLogout, loadData, loadUserInfo, openShiftDialog, saveShift, confirmDeleteShift, saveTimeoff, saveOvertime, saveUser, openApproveTimeoff, doApproveTimeoff, openApproveOvertime, doApproveOvertime, openEditTimeoff, openEditOvertime, openEditUser, confirmDeleteTimeoff, confirmDeleteOvertime, confirmDeleteUser, toggleUserRole, openResetPassword, saveWebhookConfig, testWebhook, saveWechatConfig, testWechatPush, exportMonthlyStats, exportBackup, importBackup, changePassword, getCellClass, showTooltip, hideTooltip };
             }
         }).use(ElementPlus).mount('#app');
     </script>

@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, List
@@ -11,7 +11,6 @@ import database
 import os
 import hashlib
 import requests
-import json
 import json
 import io
 import csv
@@ -25,6 +24,13 @@ from hashlib import sha1
 SECRET_KEY = os.getenv("JWT_SECRET", "attendance-system-secret-key-2026")
 ALGORITHM = "HS256"
 TOKEN_EXPIRE_DAYS = 30
+
+# 企业微信配置（从环境变量读取，用于回调验证）
+WECHAT_CORP_ID = os.getenv("WECHAT_CORP_ID", "ww239ef8d083b060c3")
+WECHAT_TOKEN = os.getenv("WECHAT_TOKEN", "b2bwx7eK4YTFcokbT8v")
+WECHAT_ENCODING_AES_KEY = os.getenv("WECHAT_ENCODING_AES_KEY", "23aeqLKiM57mgOQrGLvON97UWNRQx6yYTJZGCaMeHCB")
+WECHAT_AGENT_ID = int(os.getenv("WECHAT_AGENT_ID", "1000015"))
+WECHAT_API_URL = os.getenv("WECHAT_API_URL", "http://ecs.dysobo.cn:56622")
 
 def get_password_hash(password):
     return hashlib.sha256(password.encode()).hexdigest()
@@ -70,7 +76,7 @@ class ShiftUpdate(BaseModel):
 class TimeOffRequestCreate(BaseModel):
     date: date
     hours: float = 8.0
-    type: str = "U"  # U 调休/B 病假/S 事假/H 婚假/C 产假/L 护理假/J 经期假/Y 孕期假/R 哺乳假/N 年休假/T 探亲假/Z 丧假
+    type: str = "U"
     reason: Optional[str] = None
 
 class WebhookConfig(BaseModel):
@@ -84,6 +90,7 @@ class WebhookConfig(BaseModel):
 
 class TimeOffRequestApprove(BaseModel):
     approved: bool
+    admin_comment: Optional[str] = None
 
 class OvertimeRecordCreate(BaseModel):
     date: date
@@ -92,13 +99,12 @@ class OvertimeRecordCreate(BaseModel):
 
 class OvertimeRecordApprove(BaseModel):
     approved: bool
+    admin_comment: Optional[str] = None
 
 # ==================== 工具函数 ====================
-# (已在上方定义)
 
 def create_access_token(data: dict):
     to_encode = data.copy()
-    # sub 必须是字符串
     if 'sub' in to_encode:
         to_encode['sub'] = str(to_encode['sub'])
     to_encode.update({"exp": datetime.now().timestamp() + TOKEN_EXPIRE_DAYS * 86400})
@@ -111,7 +117,6 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
         user_id = payload.get("sub")
         if user_id is None:
             raise HTTPException(status_code=401, detail="Invalid token")
-        # sub 是字符串，转成整数
         user_id = int(user_id)
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
@@ -128,7 +133,6 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
 @app.on_event("startup")
 def startup():
     database.init_db()
-    # 创建默认管理员
     db = database.SessionLocal()
     try:
         admin = db.query(database.User).filter(database.User.name == "admin").first()
@@ -187,7 +191,7 @@ def create_user(user_data: UserCreate, current_user: database.User = Depends(get
 @app.get("/api/users")
 def list_users(current_user: database.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
     users = db.query(database.User).all()
-    return [{"id": u.id, "name": u.name, "role": u.role, "phone": u.phone} for u in users]
+    return [{"id": u.id, "name": u.name, "role": u.role, "phone": u.phone, "wechat_user_id": u.wechat_user_id, "enable_push": u.enable_push} for u in users]
 
 @app.post("/api/users/{user_id}/reset-password")
 def reset_password(user_id: int, password_data: dict, current_user: database.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
@@ -260,7 +264,6 @@ def update_user(user_id: int, user_data: dict, current_user: database.User = Dep
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
     
-    # 更新用户信息
     if "name" in user_data:
         user.name = user_data["name"]
     if "role" in user_data:
@@ -271,7 +274,6 @@ def update_user(user_id: int, user_data: dict, current_user: database.User = Dep
         user.wechat_user_id = user_data["wechat_user_id"]
     if "enable_push" in user_data:
         user.enable_push = user_data["enable_push"]
-    # 密码只在创建时设置，编辑时不更新
     
     db.commit()
     db.refresh(user)
@@ -281,7 +283,6 @@ def update_user(user_id: int, user_data: dict, current_user: database.User = Dep
 
 @app.get("/api/wechat/bind")
 def get_wechat_bind(current_user: database.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
-    """获取当前用户的企业微信绑定信息"""
     return {
         "wechat_user_id": current_user.wechat_user_id,
         "enable_push": current_user.enable_push
@@ -289,7 +290,6 @@ def get_wechat_bind(current_user: database.User = Depends(get_current_user), db:
 
 @app.post("/api/wechat/bind")
 def bind_wechat(data: dict, current_user: database.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
-    """绑定企业微信用户 ID"""
     current_user.wechat_user_id = data.get("wechat_user_id", "")
     current_user.enable_push = data.get("enable_push", True)
     db.commit()
@@ -299,19 +299,18 @@ def bind_wechat(data: dict, current_user: database.User = Depends(get_current_us
 
 @app.get("/api/wechat/config")
 def get_wechat_config(current_user: database.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
-    """获取企业微信配置（仅管理员）"""
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="需要管理员权限")
     
     config = db.query(database.WechatConfig).first()
     if not config:
         return {
-            "api_url": "https://qyapi.weixin.qq.com",
-            "corp_id": "",
+            "api_url": WECHAT_API_URL,
+            "corp_id": WECHAT_CORP_ID,
             "secret": "",
-            "agent_id": 0,
-            "token": "",
-            "encoding_aes_key": "",
+            "agent_id": WECHAT_AGENT_ID,
+            "token": WECHAT_TOKEN,
+            "encoding_aes_key": WECHAT_ENCODING_AES_KEY,
             "enabled": False
         }
     
@@ -327,7 +326,6 @@ def get_wechat_config(current_user: database.User = Depends(get_current_user), d
 
 @app.post("/api/wechat/config")
 def save_wechat_config(config_data: dict, current_user: database.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
-    """保存企业微信配置（仅管理员）"""
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="需要管理员权限")
     
@@ -336,12 +334,12 @@ def save_wechat_config(config_data: dict, current_user: database.User = Depends(
         config = database.WechatConfig()
         db.add(config)
     
-    config.api_url = config_data.get("api_url", "https://qyapi.weixin.qq.com")
-    config.corp_id = config_data.get("corp_id", "")
+    config.api_url = config_data.get("api_url", WECHAT_API_URL)
+    config.corp_id = config_data.get("corp_id", WECHAT_CORP_ID)
     config.secret = config_data.get("secret", "")
-    config.agent_id = config_data.get("agent_id", 0)
-    config.token = config_data.get("token", "")
-    config.encoding_aes_key = config_data.get("encoding_aes_key", "")
+    config.agent_id = config_data.get("agent_id", WECHAT_AGENT_ID)
+    config.token = config_data.get("token", WECHAT_TOKEN)
+    config.encoding_aes_key = config_data.get("encoding_aes_key", WECHAT_ENCODING_AES_KEY)
     config.enabled = config_data.get("enabled", False)
     config.updated_at = datetime.now()
     
@@ -350,11 +348,9 @@ def save_wechat_config(config_data: dict, current_user: database.User = Depends(
 
 @app.post("/api/wechat/test-push")
 def test_wechat_push(data: dict, current_user: database.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
-    """测试企业微信推送（仅管理员）"""
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="需要管理员权限")
     
-    # 发送给管理员自己
     title = data.get("title", "测试推送")
     content = data.get("content", "这是一条测试消息")
     link_url = data.get("link", "http://x.dysobo.cn:8888/kq/")
@@ -368,10 +364,25 @@ def test_wechat_push(data: dict, current_user: database.User = Depends(get_curre
 
 # ==================== 企业微信回调接口 ====================
 
-def verify_wechat_signature(token: str, signature: str, timestamp: str, nonce: str) -> bool:
-    """验证企业微信签名"""
+import base64
+import struct
+from Crypto.Cipher import AES
+
+
+def verify_wechat_signature(token: str, signature: str, timestamp: str, nonce: str, echostr: str = None) -> bool:
+    """验证企业微信签名
+    
+    GET 请求验证 URL 时，echostr 需要参与签名计算
+    POST 请求接收消息时，echostr 为空，使用 msg_encrypt 参与签名
+    """
     try:
-        sorted_list = sorted([token, timestamp, nonce])
+        from hashlib import sha1
+        if echostr:
+            # GET 请求：sort(token, timestamp, nonce, echostr)
+            sorted_list = sorted([token, timestamp, nonce, echostr])
+        else:
+            # POST 请求：sort(token, timestamp, nonce, msg_encrypt)
+            sorted_list = sorted([token, timestamp, nonce])
         hash_str = ''.join(sorted_list).encode('utf-8')
         hash_str = sha1(hash_str).hexdigest()
         return hash_str == signature
@@ -379,31 +390,119 @@ def verify_wechat_signature(token: str, signature: str, timestamp: str, nonce: s
         print(f"❌ 签名验证失败：{e}")
         return False
 
-def decrypt_wechat_message(encoding_aes_key: str, encrypt: str) -> str:
-    """解密企业微信消息"""
-    # TODO: 实现 AES 解密
-    # 这里简化处理，实际需要使用 Crypto.Cipher.AES
-    return encrypt
+
+def decrypt_echostr(encoding_aes_key: str, echostr: str, corp_id: str) -> str:
+    """解密 echostr 得到明文
+    
+    根据官方文档，解密后格式：random(16B) + msg_len(4B) + msg + receiveid
+    但实际数据可能是：msg_len(4B) + random(16B) + msg + receiveid
+    
+    URL 验证场景，只返回 msg 部分
+    """
+    try:
+        aes_key = base64.b64decode(encoding_aes_key + "=")
+        ciphertext = base64.b64decode(echostr)
+        cipher = AES.new(aes_key, AES.MODE_CBC, ciphertext[:16])
+        rand_msg = cipher.decrypt(ciphertext[16:])
+        
+        # 去掉 PKCS#7 padding
+        pad = rand_msg[-1]
+        rand_msg = rand_msg[:-pad]
+        
+        # 尝试解析方式 1: msg_len(4B) + random(16B) + msg + receiveid
+        msg_len = struct.unpack('>I', rand_msg[:4])[0]
+        random_16 = rand_msg[4:20]
+        rest = rand_msg[20:]  # msg + receiveid
+        
+        # receiveid 在末尾，长度等于 corp_id
+        receiveid_len = len(corp_id.encode())
+        if len(rest) >= receiveid_len:
+            receiveid = rest[-receiveid_len:]
+            msg = rest[:-receiveid_len]
+            
+            # 验证 receiveid 是否匹配 corp_id
+            if receiveid == corp_id.encode():
+                return msg.decode('utf-8')
+        
+        # 尝试解析方式 2: random(16B) + msg_len(4B) + msg + receiveid
+        random_16_v2 = rand_msg[:16]
+        msg_len_v2 = struct.unpack('>I', rand_msg[16:20])[0]
+        if msg_len_v2 < len(rand_msg) - 20:
+            msg_v2 = rand_msg[20:20+msg_len_v2]
+            receiveid_v2 = rand_msg[20+msg_len_v2:]
+            if receiveid_v2 == corp_id.encode():
+                return msg_v2.decode('utf-8')
+        
+        # 如果都失败，返回去掉前 20 字节的内容
+        return rand_msg[20:].decode('utf-8', errors='ignore')
+    except Exception as e:
+        print(f"解密失败：{e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
 
 @app.get("/api/wechat/callback")
 def wechat_callback_get(
+    request: Request,
     msg_signature: str = "",
     timestamp: str = "",
     nonce: str = "",
     echostr: str = "",
     db: Session = Depends(database.get_db)
 ):
-    """企业微信 URL 验证（GET 请求）"""
-    config = db.query(database.WechatConfig).filter(database.WechatConfig.enabled == True).first()
+    """企业微信 URL 验证（GET 请求）
     
-    if not config or not config.token:
-        return echostr
+    验证流程：
+    1. 企业微信发送 GET 请求，携带 msg_signature, timestamp, nonce, echostr
+    2. echostr 是加密的，需要使用 EncodingAESKey 解密
+    3. 签名计算：sha1(sort(token, timestamp, nonce, echostr))
+    4. 验证签名通过后，解密 echostr 得到明文
+    5. 返回解密后的明文（不能加引号，不能带 bom 头，不能带换行符）
+    """
+    # URL decode
+    import urllib.parse
+    query_string = request.scope.get("query_string", b"").decode()
+    print(f"DEBUG: query_string={query_string}")
+    for param in query_string.split("&"):
+        if param.startswith("echostr="):
+            echostr = urllib.parse.unquote(param[8:])
+            print(f"DEBUG: echostr={echostr}")
+            break
+
+    # 获取配置
+    config = db.query(database.WechatConfig).first()
+    token = config.token if config and config.token else WECHAT_TOKEN
+    encoding_aes_key = config.encoding_aes_key if config and config.encoding_aes_key else WECHAT_ENCODING_AES_KEY
+    corp_id = config.corp_id if config and config.corp_id else WECHAT_CORP_ID
     
-    # 验证签名
-    if verify_wechat_signature(config.token, msg_signature, timestamp, nonce):
-        return echostr
-    else:
+    print(f"🔍 回调验证请求:")
+    print(f"  Token: [{token}]")
+    print(f"  AES Key: [{encoding_aes_key[:10]}...]")
+    print(f"  CorpID: [{corp_id}]")
+    print(f"  请求签名：{msg_signature}")
+    print(f"  Timestamp: {timestamp}")
+    print(f"  Nonce: {nonce}")
+    print(f"  Echostr: {echostr[:50]}...")
+    
+    # 验证签名（echostr 需要参与签名计算）
+    if not verify_wechat_signature(token, msg_signature, timestamp, nonce, echostr):
+        print(f"  ❌ 签名验证失败")
         raise HTTPException(status_code=403, detail="签名验证失败")
+    
+    print(f"  ✅ 签名验证成功")
+    
+    # 解密 echostr
+    decrypted_msg = decrypt_echostr(encoding_aes_key, echostr, corp_id)
+    if decrypted_msg is None:
+        print(f"  ❌ 解密失败")
+        raise HTTPException(status_code=500, detail="解密失败")
+    
+    print(f"  ✅ 解密成功，返回明文：{decrypted_msg}")
+    
+    # 返回明文（不能加引号，不能带 bom 头，不能带换行符）
+    return PlainTextResponse(content=decrypted_msg)
+
 
 @app.post("/api/wechat/callback")
 async def wechat_callback_post(
@@ -414,168 +513,42 @@ async def wechat_callback_post(
     db: Session = Depends(database.get_db)
 ):
     """接收企业微信消息（POST 请求）"""
-    config = db.query(database.WechatConfig).filter(database.WechatConfig.enabled == True).first()
+    config = db.query(database.WechatConfig).first()
+    token = config.token if config and config.token else WECHAT_TOKEN
     
-    # 验证签名
-    if config and config.token:
-        if not verify_wechat_signature(config.token, msg_signature, timestamp, nonce):
-            raise HTTPException(status_code=403, detail="签名验证失败")
-    
-    # 读取请求体
     body = await request.body()
     body_str = body.decode('utf-8')
+    print(f"📥 收到企业微信消息：{body_str[:200]}...")
     
-    # 解析 XML
+    # 处理企业微信菜单点击事件
     try:
-        xml_root = ET.fromstring(body_str)
+        import xml.etree.ElementTree as ET
+        root = ET.fromstring(body_str)
+        msg_type = root.find('MsgType')
+        event = root.find('Event')
+        event_key = root.find('EventKey')
+        from_user = root.find('FromUserName')
         
-        # 获取消息类型
-        msg_type = xml_root.find('MsgType').text if xml_root.find('MsgType') is not None else ''
-        
-        # 只处理文本消息
-        if msg_type != 'text':
-            return "success"
-        
-        # 获取发送者
-        from_user = xml_root.find('FromUserName').text if xml_root.find('FromUserName') is not None else ''
-        
-        # 获取消息内容
-        content = xml_root.find('Content').text if xml_root.find('Content') is not None else ''
-        
-        # 处理指令
-        response = process_wechat_command(from_user, content, db)
-        
-        # 返回响应（简化处理，实际需要加密）
-        # TODO: 实现响应加密
-        print(f"✅ 处理指令：{from_user} - {content} → {response}")
-        
-        return "success"
-        
+        if msg_type is not None and msg_type.text == 'event':
+            if event is not None and event.text == 'CLICK':
+                if event_key is not None and event_key.text == 'PUSH_MY_STATS':
+                    user_id = from_user.text if from_user is not None else ''
+                    print(f'Click event: PUSH_MY_STATS from {user_id}')
+                    # 调用处理函数
+                    try:
+                        from wechat_click_handler import handle_push_stats
+                        handle_push_stats(user_id, db)
+                    except Exception as e:
+                        print(f'Error calling handler: {e}')
+        return 'success'
     except Exception as e:
-        print(f"❌ 解析消息失败：{e}")
-        return "success"  # 返回 success 避免企业微信重试
+        print(f'Error parsing message: {e}')
+        return 'success'
 
-def process_wechat_command(user_wechat_id: str, command: str, db: Session):
-    """处理企业微信指令"""
-    # 根据企业微信 ID 查找用户
-    user = db.query(database.User).filter(database.User.wechat_user_id == user_wechat_id).first()
-    if not user:
-        return "❌ 未找到绑定用户，请先在考勤系统中绑定企业微信 ID"
-    
-    command = command.strip().lower()
-    
-    # 指令：记加班 Xh
-    match = re.match(r'记加班\s*(\d+(?:\.\d+)?)\s*h?', command)
-    if match:
-        hours = float(match.group(1))
-        return create_overtime_command(user, hours, db)
-    
-    # 指令：查加班
-    if command in ['查加班', '加班', 'query overtime']:
-        return query_overtime_command(user, db)
-    
-    # 指令：查调休
-    if command in ['查调休', '调休', 'query leave']:
-        return query_leave_command(user, db)
-    
-    # 指令：帮助
-    if command in ['帮助', 'help', '指令']:
-        return get_help_command()
-    
-    return "❌ 未知指令，发送【帮助】查看可用指令"
-
-def create_overtime_command(user: database.User, hours: float, db: Session) -> str:
-    """记加班指令"""
-    from datetime import date
-    
-    # 创建加班记录
-    record = database.OvertimeRecord(
-        user_id=user.id,
-        date=date.today(),
-        hours=hours,
-        reason="企业微信指令",
-        status="pending"
-    )
-    db.add(record)
-    db.commit()
-    
-    # 发送通知给管理员
-    admins = db.query(database.User).filter(database.User.role == "admin").all()
-    for admin in admins:
-        send_wechat_message(
-            admin.id,
-            f"加班申请 - {user.name}",
-            f"{user.name} 申请加班\n日期：{date.today()}\n时长：{hours}小时\n\n请点击审批",
-            "http://x.dysobo.cn:8888/kq/?page=overtime",
-            db
-        )
-    
-    return f"✅ 已提交加班申请：今日加班 {hours} 小时\n请等待管理员确认"
-
-def query_overtime_command(user: database.User, db: Session) -> str:
-    """查询加班指令"""
-    from datetime import date, timedelta
-    
-    # 本月起止日期
-    today = date.today()
-    month_start = date(today.year, today.month, 1)
-    month_end = date(today.year, today.month + 1, 1) if today.month < 12 else date(today.year + 1, 1, 1)
-    
-    # 查询本月加班
-    records = db.query(database.OvertimeRecord).filter(
-        database.OvertimeRecord.user_id == user.id,
-        database.OvertimeRecord.date >= month_start,
-        database.OvertimeRecord.date < month_end,
-        database.OvertimeRecord.status == "approved"
-    ).all()
-    
-    total_hours = sum(r.hours for r in records)
-    
-    return f"📊 本月加班统计\n累计：{total_hours} 小时\n笔数：{len(records)} 笔"
-
-def query_leave_command(user: database.User, db: Session) -> str:
-    """查询调休指令"""
-    from datetime import date
-    
-    # 本月起止日期
-    today = date.today()
-    month_start = date(today.year, today.month, 1)
-    month_end = date(today.year, today.month + 1, 1) if today.month < 12 else date(today.year + 1, 1, 1)
-    
-    # 查询本月调休
-    records = db.query(database.TimeOffRequest).filter(
-        database.TimeOffRequest.user_id == user.id,
-        database.TimeOffRequest.date >= month_start,
-        database.TimeOffRequest.date < month_end,
-        database.TimeOffRequest.status == "approved"
-    ).all()
-    
-    total_hours = sum(r.hours for r in records)
-    
-    return f"📊 本月调休统计\n累计：{total_hours} 小时\n笔数：{len(records)} 笔"
-
-def get_help_command() -> str:
-    """帮助指令"""
-    return """📖 可用指令：
-
-🕐 加班相关：
-  记加班 Xh - 记录当日加班 X 小时
-  查加班 - 查询本月加班统计
-
-🏖️ 调休相关：
-  查调休 - 查询本月调休统计
-
-❓ 其他：
-  帮助 - 显示此帮助信息
-
-示例：
-  记加班 3h
-  查加班"""
 
 # ==================== 企业微信推送函数 ====================
 
 def get_wechat_access_token(db: Session) -> str:
-    """获取企业微信 access_token"""
     config = db.query(database.WechatConfig).filter(database.WechatConfig.enabled == True).first()
     if not config or not config.corp_id or not config.secret:
         return ""
@@ -599,26 +572,21 @@ def get_wechat_access_token(db: Session) -> str:
         return ""
 
 def send_wechat_message(user_id: int, title: str, content: str, link_url: str = "", db: Session = None):
-    """发送企业微信消息"""
     if not db:
         return False
     
-    # 检查企业微信配置
     config = db.query(database.WechatConfig).filter(database.WechatConfig.enabled == True).first()
     if not config:
         return False
     
-    # 获取用户的企业微信 ID
     user = db.query(database.User).filter(database.User.id == user_id).first()
     if not user or not user.enable_push or not user.wechat_user_id:
         return False
     
-    # 获取 access_token
     access_token = get_wechat_access_token(db)
     if not access_token:
         return False
     
-    # 发送文本卡片消息
     try:
         url = f"{config.api_url}/cgi-bin/message/send?access_token={access_token}"
         payload = {
@@ -650,10 +618,9 @@ def send_wechat_message(user_id: int, title: str, content: str, link_url: str = 
 
 @app.get("/api/shifts/team")
 def get_team_shifts(db: Session = Depends(database.get_db)):
-    """获取班组排班 - 今日往后 30 天（含今日）"""
     from datetime import timedelta
     today = date.today()
-    end_date = today + timedelta(days=29)  # 含今日共 30 天
+    end_date = today + timedelta(days=29)
     
     shifts = db.query(database.Shift).filter(
         database.Shift.date >= today,
@@ -667,10 +634,10 @@ def get_team_shifts(db: Session = Depends(database.get_db)):
             "id": s.id,
             "user_id": s.user_id,
             "user_name": user.name if user else "未知",
-            "phone": user.phone if user and user.phone else "-",  # 联系方式
+            "phone": user.phone if user and user.phone else "-",
             "date": str(s.date),
             "shift_type": s.shift_type,
-            "note": s.note if s.note else "-"  # 备注
+            "note": s.note if s.note else "-"
         })
     return result
 
@@ -704,10 +671,8 @@ def create_shift(shift_data: ShiftCreate, current_user: database.User = Depends(
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="需要管理员权限")
     
-    # 确保 user_id 是整数
     user_id = int(shift_data.user_id) if isinstance(shift_data.user_id, str) else shift_data.user_id
     
-    # 检查是否已存在该用户该日期的排班
     existing = db.query(database.Shift).filter(
         database.Shift.user_id == user_id,
         database.Shift.date == shift_data.date
@@ -762,9 +727,9 @@ def list_time_off(user_id: Optional[int] = None, status: Optional[str] = None, d
     if status:
         query = query.filter(database.TimeOffRequest.status == status)
     
-    requests = query.order_by(database.TimeOffRequest.created_at.desc()).all()
+    requests_list = query.order_by(database.TimeOffRequest.created_at.desc()).all()
     result = []
-    for r in requests:
+    for r in requests_list:
         user = db.query(database.User).filter(database.User.id == r.user_id).first()
         result.append({
             "id": r.id,
@@ -792,12 +757,21 @@ def create_time_off(request_data: TimeOffRequestCreate, current_user: database.U
     db.commit()
     db.refresh(request)
     
-    # 发送 webhook 通知
+    # 发送企业微信推送给所有管理员
+    type_names = {"U":"调休","B":"病假","S":"事假","H":"婚假","C":"产假","L":"护理假","J":"经期假","Y":"孕期假","R":"哺乳假","N":"年休假","T":"探亲假","Z":"丧假"}
+    type_name = type_names.get(request_data.type, "调休")
+    link_url = f"http://x.dysobo.cn:8888/kq/?page=timeoff"
+    title = f"🏖️ {type_name}申请 - 待审批"
+    reason_text = f"\n事由：{request_data.reason}" if request_data.reason else ""
+    content = f"申请人：{current_user.name}\n类型：{type_name}\n日期：{request_data.date}\n时长：{request_data.hours}小时{reason_text}\n\n请点击审批"
+    admins = db.query(database.User).filter(database.User.role == "admin").all()
+    for admin in admins:
+        send_wechat_message(admin.id, title, content, link_url, db)
+    
+    # 发送 Webhook 通知
     webhook_config = load_webhook_config()
     if webhook_config.get("enabled") and webhook_config.get("notify_time_off"):
         link_url = f"http://x.dysobo.cn:8888/kq/?page=timeoff&id={request.id}"
-        type_names = {"U":"调休","B":"病假","S":"事假","H":"婚假","C":"产假","L":"护理假","J":"经期假","Y":"孕期假","R":"哺乳假","N":"年休假","T":"探亲假","Z":"丧假"}
-        type_name = type_names.get(request_data.type, "调休")
         content = f"申请人：{current_user.name}\n类型：{type_name}\n日期：{request_data.date}\n时长：{request_data.hours}小时\n事由：{request_data.reason}\n\n👉 点击审批：{link_url}"
         send_webhook(
             webhook_config,
@@ -822,12 +796,12 @@ def approve_time_off(request_id: int, approve_data: TimeOffRequestApprove, curre
     request.updated_at = datetime.now()
     db.commit()
     
-    # 发送企业微信推送通知给申请人
     type_names = {"U":"调休","B":"病假","S":"事假","H":"婚假","C":"产假","L":"护理假","J":"经期假","Y":"孕期假","R":"哺乳假","N":"年休假","T":"探亲假","Z":"丧假"}
     type_name = type_names.get(request.type, "调休")
     status_text = "已批准" if approve_data.approved else "已拒绝"
     title = f"{type_name}申请{status_text}"
-    content = f"您的{type_name}申请{status_text}\n日期：{request.date}\n时长：{request.hours}小时"
+    comment_text = f"\n审批留言：{approve_data.admin_comment}" if approve_data.admin_comment else ""
+    content = f"您的{type_name}申请{status_text}\n日期：{request.date}\n时长：{request.hours}小时{comment_text}"
     link_url = f"http://x.dysobo.cn:8888/kq/?page=timeoff"
     send_wechat_message(request.user_id, title, content, link_url, db)
     
@@ -857,11 +831,9 @@ def delete_time_off(request_id: int, current_user: database.User = Depends(get_c
     if not request:
         raise HTTPException(status_code=404, detail="申请不存在")
     
-    # 权限检查：管理员可删除任何记录，本人只能删除 pending/rejected
     if current_user.role != "admin":
         if request.user_id != current_user.id:
             raise HTTPException(status_code=403, detail="无权限删除")
-        # 本人只能删除 pending 或 rejected 状态
         if request.status not in ["pending", "rejected"]:
             raise HTTPException(status_code=400, detail="已批准，不可删除")
     
@@ -895,12 +867,9 @@ def list_overtime(user_id: Optional[int] = None, status: Optional[str] = None, d
         })
     return result
 
-# Webhook 配置文件路径（使用相对路径，与 main.py 同目录）
-import os
 WEBHOOK_CONFIG_FILE = os.path.join(os.path.dirname(__file__), "webhook_config.json")
 
 def load_webhook_config():
-    """加载 webhook 配置"""
     try:
         if os.path.exists(WEBHOOK_CONFIG_FILE):
             with open(WEBHOOK_CONFIG_FILE, "r", encoding="utf-8") as f:
@@ -910,9 +879,7 @@ def load_webhook_config():
     return {"enabled": False, "url": "", "route_id": "", "notify_time_off": True, "notify_overtime": True, "notify_time_off_approved": False, "notify_overtime_approved": False}
 
 def save_webhook_config(config: dict):
-    """保存 webhook 配置"""
     try:
-        # 确保目录存在
         os.makedirs(os.path.dirname(WEBHOOK_CONFIG_FILE), exist_ok=True)
         with open(WEBHOOK_CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump(config, f, indent=2, ensure_ascii=False)
@@ -923,13 +890,6 @@ def save_webhook_config(config: dict):
         return False
 
 def send_webhook(config: dict, title: str, content: str, link_url: str = ""):
-    """发送 webhook 通知
-    Args:
-        config: webhook 配置
-        title: 标题
-        content: 内容
-        link_url: 跳转链接
-    """
     if not config.get("enabled") or not config.get("url") or not config.get("route_id"):
         return False
     try:
@@ -959,14 +919,12 @@ def send_webhook(config: dict, title: str, content: str, link_url: str = ""):
 
 @app.get("/api/webhook/config")
 def get_webhook_config(current_user: database.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
-    """获取 webhook 配置（仅管理员）"""
     if current_user.role != "admin":
         return {"enabled": False, "url": "", "route_id": "", "notify_time_off": True, "notify_overtime": True, "notify_time_off_approved": False, "notify_overtime_approved": False}
     return load_webhook_config()
 
 @app.post("/api/webhook/config")
 def update_webhook_config(webhook_config: WebhookConfig, current_user: database.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
-    """更新 webhook 配置（仅管理员）"""
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="需要管理员权限")
     config = webhook_config.dict()
@@ -975,7 +933,6 @@ def update_webhook_config(webhook_config: WebhookConfig, current_user: database.
 
 @app.post("/api/webhook/test")
 def test_webhook(webhook_test: dict, current_user: database.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
-    """测试 webhook 推送（仅管理员）"""
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="需要管理员权限")
     config = load_webhook_config()
@@ -999,7 +956,16 @@ def create_overtime(record_data: OvertimeRecordCreate, current_user: database.Us
     db.commit()
     db.refresh(record)
     
-    # 发送 webhook 通知
+    # 发送企业微信推送给所有管理员
+    link_url = f"http://x.dysobo.cn:8888/kq/?page=overtime"
+    title = "⏰ 加班记录 - 待确认"
+    reason_text = f"\n事由：{record_data.reason}" if record_data.reason else ""
+    content = f"申请人：{current_user.name}\n日期：{record_data.date}\n时长：{record_data.hours}小时{reason_text}\n\n请点击确认"
+    admins = db.query(database.User).filter(database.User.role == "admin").all()
+    for admin in admins:
+        send_wechat_message(admin.id, title, content, link_url, db)
+    
+    # 发送 Webhook 通知
     webhook_config = load_webhook_config()
     if webhook_config.get("enabled") and webhook_config.get("notify_overtime"):
         link_url = f"http://x.dysobo.cn:8888/kq/?page=overtime&id={record.id}"
@@ -1026,10 +992,10 @@ def approve_overtime(record_id: int, approve_data: OvertimeRecordApprove, curren
     record.approved_by = current_user.id
     db.commit()
     
-    # 发送企业微信推送通知给申请人
     status_text = "已确认" if approve_data.approved else "已拒绝"
     title = f"加班记录{status_text}"
-    content = f"您的加班记录{status_text}\n日期：{record.date}\n时长：{record.hours}小时"
+    comment_text = f"\n审批留言：{approve_data.admin_comment}" if approve_data.admin_comment else ""
+    content = f"您的加班记录{status_text}\n日期：{record.date}\n时长：{record.hours}小时{comment_text}"
     link_url = f"http://x.dysobo.cn:8888/kq/?page=overtime"
     send_wechat_message(record.user_id, title, content, link_url, db)
     
@@ -1057,11 +1023,9 @@ def delete_overtime(record_id: int, current_user: database.User = Depends(get_cu
     if not record:
         raise HTTPException(status_code=404, detail="记录不存在")
     
-    # 权限检查：管理员可删除任何记录，本人只能删除 pending/rejected
     if current_user.role != "admin":
         if record.user_id != current_user.id:
             raise HTTPException(status_code=403, detail="无权限删除")
-        # 本人只能删除 pending 或 rejected 状态
         if record.status not in ["pending", "rejected"]:
             raise HTTPException(status_code=400, detail="已确认，不可删除")
     
@@ -1073,28 +1037,21 @@ def delete_overtime(record_id: int, current_user: database.User = Depends(get_cu
 
 @app.get("/api/stats/summary")
 def get_summary(current_user: database.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
-    """获取统计汇总
-    - 管理员：统计所有组员的总和（本年度）
-    - 组员：仅统计自己的
-    """
     from datetime import datetime
     current_year = datetime.now().year
     year_start = date(current_year, 1, 1)
     
-    # 如果是管理员，统计所有组员；如果是组员，只统计自己
     if current_user.role == "admin":
         users = db.query(database.User).filter(database.User.role == "member").all()
     else:
         users = [current_user]
     
-    # 初始化总和
     total_approved_time_off = 0
     total_pending_time_off = 0
     total_overtime_hours = 0.0
     total_pending_overtime = 0
     
     for user in users:
-        # 调休统计 - 本年度（按小时计算）
         approved_time_off_records = db.query(database.TimeOffRequest).filter(
             database.TimeOffRequest.user_id == user.id,
             database.TimeOffRequest.status == "approved",
@@ -1109,7 +1066,6 @@ def get_summary(current_user: database.User = Depends(get_current_user), db: Ses
         ).all()
         pending_time_off = sum(r.hours for r in pending_time_off_records)
         
-        # 加班统计 - 本年度
         approved_overtime = db.query(database.OvertimeRecord).filter(
             database.OvertimeRecord.user_id == user.id,
             database.OvertimeRecord.status == "approved",
@@ -1117,18 +1073,15 @@ def get_summary(current_user: database.User = Depends(get_current_user), db: Ses
         ).all()
         total_overtime_hours += sum(r.hours for r in approved_overtime)
         
-        # 待确认加班 - 所有（不限年度）
         pending_overtime = db.query(database.OvertimeRecord).filter(
             database.OvertimeRecord.user_id == user.id,
             database.OvertimeRecord.status == "pending"
         ).count()
         
-        # 累加
         total_approved_time_off += approved_time_off
         total_pending_time_off += pending_time_off
         total_pending_overtime += pending_overtime
     
-    # 返回总和
     return {
         "is_admin": current_user.role == "admin",
         "total_users": len(users),
@@ -1140,7 +1093,6 @@ def get_summary(current_user: database.User = Depends(get_current_user), db: Ses
 
 @app.get("/api/stats/my-summary")
 def get_my_summary(current_user: database.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
-    """获取当前用户的统计"""
     approved_time_off = db.query(database.TimeOffRequest).filter(
         database.TimeOffRequest.user_id == current_user.id,
         database.TimeOffRequest.status == "approved"
@@ -1172,38 +1124,29 @@ def get_my_summary(current_user: database.User = Depends(get_current_user), db: 
 
 @app.get("/api/export/monthly")
 def export_monthly_stats(month: Optional[int] = None, year: Optional[int] = None, current_user: database.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
-    """导出当月统计数据（CSV 格式）"""
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="需要管理员权限")
     
-    from datetime import timedelta
     import calendar
-    # 默认当前月份
     if not month or not year:
         today = date.today()
         month = today.month
         year = today.year
     
-    # 计算月份起止日期
     month_start = date(year, month, 1)
     _, days_in_month = calendar.monthrange(year, month)
     
-    # 获取所有用户
     users = db.query(database.User).filter(database.User.role == "member").all()
     
-    # 准备 CSV 数据
     output = io.StringIO()
     writer = csv.writer(output)
     
-    # 写入表头 - 第一行：标题
     header = ['姓名'] + [f'{d}日' for d in range(1, days_in_month + 1)]
     writer.writerow(header)
     
-    # 写入每个用户的数据
     for user in users:
         row = [user.name]
         
-        # 查询该用户当月的所有调休和加班记录
         time_off_records = db.query(database.TimeOffRequest).filter(
             database.TimeOffRequest.user_id == user.id,
             database.TimeOffRequest.date >= month_start,
@@ -1216,25 +1159,21 @@ def export_monthly_stats(month: Optional[int] = None, year: Optional[int] = None
             database.OvertimeRecord.date < date(year, month + 1, 1) if month < 12 else date(year + 1, 1, 1)
         ).all()
         
-        # 按日期组织数据
         daily_data = {}
         
-        # 处理假期记录（12 种类型）
         for t in time_off_records:
             day = t.date.day
             if day not in daily_data:
                 daily_data[day] = []
-            type_symbol = t.type if t.type else 'U'  # 默认为 U
-            daily_data[day].append(f"{type_symbol}{t.hours}")  # U/B/S/H/C/L/J/Y/R/N/T/Z = 各种假期
+            type_symbol = t.type if t.type else 'U'
+            daily_data[day].append(f"{type_symbol}{t.hours}")
         
-        # 处理加班记录
         for o in overtime_records:
             day = o.date.day
             if day not in daily_data:
                 daily_data[day] = []
-            daily_data[day].append(f"▲{o.hours}")  # ▲ = 加班
+            daily_data[day].append(f"▲{o.hours}")
         
-        # 填充每天的记录
         for day in range(1, days_in_month + 1):
             if day in daily_data:
                 row.append(' '.join(daily_data[day]))
@@ -1252,11 +1191,9 @@ def export_monthly_stats(month: Optional[int] = None, year: Optional[int] = None
 
 @app.get("/api/backup/export")
 def export_backup(current_user: database.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
-    """导出所有数据备份（JSON 格式）"""
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="需要管理员权限")
     
-    # 导出所有表数据
     users = db.query(database.User).all()
     shifts = db.query(database.Shift).all()
     time_off = db.query(database.TimeOffRequest).all()
@@ -1297,35 +1234,30 @@ def export_backup(current_user: database.User = Depends(get_current_user), db: S
 
 @app.post("/api/backup/import")
 def import_backup(backup_data: dict, current_user: database.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
-    """从备份文件恢复数据"""
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="需要管理员权限")
     
     try:
-        # 验证备份数据格式
         if "users" not in backup_data:
             raise HTTPException(status_code=400, detail="无效的备份文件格式")
         
-        # 清空现有数据（谨慎操作）
         db.query(database.OvertimeRecord).delete()
         db.query(database.TimeOffRequest).delete()
         db.query(database.Shift).delete()
         db.query(database.User).delete()
         db.commit()
         
-        # 恢复用户数据（排除 admin 用户）
         admin_user = db.query(database.User).filter(database.User.role == "admin").first()
         
         for u in backup_data.get("users", []):
             if u["role"] == "admin" and admin_user:
-                continue  # 跳过 admin 用户
+                continue
             user = database.User(
                 id=u["id"], name=u["name"], role=u["role"],
                 phone=u.get("phone"), password=admin_user.password if admin_user else get_password_hash("123456")
             )
             db.add(user)
         
-        # 恢复排班数据
         for s in backup_data.get("shifts", []):
             shift = database.Shift(
                 id=s["id"], user_id=s["user_id"], date=s["date"],
@@ -1333,23 +1265,21 @@ def import_backup(backup_data: dict, current_user: database.User = Depends(get_c
             )
             db.add(shift)
         
-        # 恢复调休数据
         for t in backup_data.get("time_off_requests", []):
-            time_off = database.TimeOffRequest(
+            time_off_req = database.TimeOffRequest(
                 id=t["id"], user_id=t["user_id"], date=t["date"],
                 hours=t["hours"], reason=t.get("reason"), status=t["status"],
                 approved_by=t.get("approved_by")
             )
-            db.add(time_off)
+            db.add(time_off_req)
         
-        # 恢复加班数据
         for o in backup_data.get("overtime_records", []):
-            overtime = database.OvertimeRecord(
+            overtime_rec = database.OvertimeRecord(
                 id=o["id"], user_id=o["user_id"], date=o["date"],
                 hours=o["hours"], reason=o.get("reason"), status=o["status"],
                 approved_by=o.get("approved_by")
             )
-            db.add(overtime)
+            db.add(overtime_rec)
         
         db.commit()
         
