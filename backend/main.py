@@ -353,7 +353,7 @@ def test_wechat_push(data: dict, current_user: database.User = Depends(get_curre
     
     title = data.get("title", "测试推送")
     content = data.get("content", "这是一条测试消息")
-    link_url = data.get("link", "http://x.dysobo.cn:8888/kq/")
+    link_url = data.get("link", "https://x.dysobo.cn/kq/")
     
     success = send_wechat_message(current_user.id, title, content, link_url, db)
     
@@ -369,21 +369,20 @@ import struct
 from Crypto.Cipher import AES
 
 
-def verify_wechat_signature(token: str, signature: str, timestamp: str, nonce: str, echostr: str = None) -> bool:
+def verify_wechat_signature(token: str, signature: str, timestamp: str, nonce: str, encrypt: str = None) -> bool:
     """验证企业微信签名
-    
-    GET 请求验证 URL 时，echostr 需要参与签名计算
-    POST 请求接收消息时，echostr 为空，使用 msg_encrypt 参与签名
+
+    签名计算：sha1(sort(token, timestamp, nonce, encrypt))
+    GET 验证 URL 时 encrypt 是 echostr 参数
+    POST 接收消息时 encrypt 是 XML 中的 Encrypt 字段
     """
     try:
         from hashlib import sha1
-        if echostr:
-            # GET 请求：sort(token, timestamp, nonce, echostr)
-            sorted_list = sorted([token, timestamp, nonce, echostr])
-        else:
-            # POST 请求：sort(token, timestamp, nonce, msg_encrypt)
-            sorted_list = sorted([token, timestamp, nonce])
-        hash_str = ''.join(sorted_list).encode('utf-8')
+        sort_list = [token, timestamp, nonce]
+        if encrypt:
+            sort_list.append(encrypt)
+        sort_list.sort()
+        hash_str = ''.join(sort_list).encode('utf-8')
         hash_str = sha1(hash_str).hexdigest()
         return hash_str == signature
     except Exception as e:
@@ -391,50 +390,37 @@ def verify_wechat_signature(token: str, signature: str, timestamp: str, nonce: s
         return False
 
 
-def decrypt_echostr(encoding_aes_key: str, echostr: str, corp_id: str) -> str:
-    """解密 echostr 得到明文
-    
-    根据官方文档，解密后格式：random(16B) + msg_len(4B) + msg + receiveid
-    但实际数据可能是：msg_len(4B) + random(16B) + msg + receiveid
-    
-    URL 验证场景，只返回 msg 部分
+def decrypt_wechat_msg(encoding_aes_key: str, encrypted: str, corp_id: str) -> str:
+    """解密企业微信消息（echostr 或消息体）
+
+    官方格式：random(16B) + msg_len(4B) + msg + receiveid
+    IV = aes_key[:16]
     """
     try:
         aes_key = base64.b64decode(encoding_aes_key + "=")
-        ciphertext = base64.b64decode(echostr)
-        cipher = AES.new(aes_key, AES.MODE_CBC, ciphertext[:16])
-        rand_msg = cipher.decrypt(ciphertext[16:])
-        
+        ciphertext = base64.b64decode(encrypted)
+
+        # IV 是 aes_key 的前 16 字节
+        iv = aes_key[:16]
+        cipher = AES.new(aes_key, AES.MODE_CBC, iv)
+        decrypted = cipher.decrypt(ciphertext)
+
         # 去掉 PKCS#7 padding
-        pad = rand_msg[-1]
-        rand_msg = rand_msg[:-pad]
-        
-        # 尝试解析方式 1: msg_len(4B) + random(16B) + msg + receiveid
-        msg_len = struct.unpack('>I', rand_msg[:4])[0]
-        random_16 = rand_msg[4:20]
-        rest = rand_msg[20:]  # msg + receiveid
-        
-        # receiveid 在末尾，长度等于 corp_id
-        receiveid_len = len(corp_id.encode())
-        if len(rest) >= receiveid_len:
-            receiveid = rest[-receiveid_len:]
-            msg = rest[:-receiveid_len]
-            
-            # 验证 receiveid 是否匹配 corp_id
-            if receiveid == corp_id.encode():
-                return msg.decode('utf-8')
-        
-        # 尝试解析方式 2: random(16B) + msg_len(4B) + msg + receiveid
-        random_16_v2 = rand_msg[:16]
-        msg_len_v2 = struct.unpack('>I', rand_msg[16:20])[0]
-        if msg_len_v2 < len(rand_msg) - 20:
-            msg_v2 = rand_msg[20:20+msg_len_v2]
-            receiveid_v2 = rand_msg[20+msg_len_v2:]
-            if receiveid_v2 == corp_id.encode():
-                return msg_v2.decode('utf-8')
-        
-        # 如果都失败，返回去掉前 20 字节的内容
-        return rand_msg[20:].decode('utf-8', errors='ignore')
+        pad = decrypted[-1]
+        if isinstance(pad, int):
+            decrypted = decrypted[:-pad]
+        else:
+            decrypted = decrypted[:-ord(pad)]
+
+        # 解析：random(16B) + msg_len(4B) + msg + receiveid
+        msg_len = struct.unpack('>I', decrypted[16:20])[0]
+        msg = decrypted[20:20 + msg_len]
+        receiveid = decrypted[20 + msg_len:]
+
+        if receiveid != corp_id.encode():
+            print(f"⚠️ receiveid 不匹配：期望 {corp_id}，实际 {receiveid.decode('utf-8', errors='ignore')}")
+
+        return msg.decode('utf-8')
     except Exception as e:
         print(f"解密失败：{e}")
         import traceback
@@ -493,7 +479,7 @@ def wechat_callback_get(
     print(f"  ✅ 签名验证成功")
     
     # 解密 echostr
-    decrypted_msg = decrypt_echostr(encoding_aes_key, echostr, corp_id)
+    decrypted_msg = decrypt_wechat_msg(encoding_aes_key, echostr, corp_id)
     if decrypted_msg is None:
         print(f"  ❌ 解密失败")
         raise HTTPException(status_code=500, detail="解密失败")
@@ -515,26 +501,48 @@ async def wechat_callback_post(
     """接收企业微信消息（POST 请求）"""
     config = db.query(database.WechatConfig).first()
     token = config.token if config and config.token else WECHAT_TOKEN
-    
+    encoding_aes_key = config.encoding_aes_key if config and config.encoding_aes_key else WECHAT_ENCODING_AES_KEY
+    corp_id = config.corp_id if config and config.corp_id else WECHAT_CORP_ID
+
     body = await request.body()
     body_str = body.decode('utf-8')
     print(f"📥 收到企业微信消息：{body_str[:200]}...")
-    
-    # 处理企业微信菜单点击事件
+
     try:
-        import xml.etree.ElementTree as ET
+        # 1. 从加密 XML 中提取 Encrypt 字段
         root = ET.fromstring(body_str)
-        msg_type = root.find('MsgType')
-        event = root.find('Event')
-        event_key = root.find('EventKey')
-        from_user = root.find('FromUserName')
-        
+        encrypt_node = root.find('Encrypt')
+        if encrypt_node is None:
+            print("❌ 未找到 Encrypt 字段")
+            return 'success'
+
+        encrypt_content = encrypt_node.text
+
+        # 2. 验证签名：sha1(sort(token, timestamp, nonce, encrypt_content))
+        if not verify_wechat_signature(token, msg_signature, timestamp, nonce, encrypt_content):
+            print("❌ POST 消息签名验证失败")
+            return 'success'
+
+        # 3. 解密消息
+        decrypted_xml = decrypt_wechat_msg(encoding_aes_key, encrypt_content, corp_id)
+        if not decrypted_xml:
+            print("❌ POST 消息解密失败")
+            return 'success'
+
+        print(f"📥 解密后消息：{decrypted_xml[:200]}...")
+
+        # 4. 解析解密后的明文 XML
+        msg_root = ET.fromstring(decrypted_xml)
+        msg_type = msg_root.find('MsgType')
+        event = msg_root.find('Event')
+        event_key = msg_root.find('EventKey')
+        from_user = msg_root.find('FromUserName')
+
         if msg_type is not None and msg_type.text == 'event':
             if event is not None and event.text == 'CLICK':
                 if event_key is not None and event_key.text == 'PUSH_MY_STATS':
                     user_id = from_user.text if from_user is not None else ''
                     print(f'Click event: PUSH_MY_STATS from {user_id}')
-                    # 调用处理函数
                     try:
                         from wechat_click_handler import handle_push_stats
                         handle_push_stats(user_id, db)
@@ -596,7 +604,7 @@ def send_wechat_message(user_id: int, title: str, content: str, link_url: str = 
             "textcard": {
                 "title": title,
                 "description": content,
-                "url": link_url if link_url else "http://x.dysobo.cn:8888/kq/",
+                "url": link_url if link_url else "https://x.dysobo.cn/kq/",
                 "btntxt": "查看详情"
             }
         }
@@ -760,10 +768,16 @@ def create_time_off(request_data: TimeOffRequestCreate, current_user: database.U
     # 发送企业微信推送给所有管理员
     type_names = {"U":"调休","B":"病假","S":"事假","H":"婚假","C":"产假","L":"护理假","J":"经期假","Y":"孕期假","R":"哺乳假","N":"年休假","T":"探亲假","Z":"丧假"}
     type_name = type_names.get(request_data.type, "调休")
-    link_url = f"http://x.dysobo.cn:8888/kq/?page=timeoff"
-    title = f"🏖️ {type_name}申请 - 待审批"
-    reason_text = f"\n事由：{request_data.reason}" if request_data.reason else ""
-    content = f"申请人：{current_user.name}\n类型：{type_name}\n日期：{request_data.date}\n时长：{request_data.hours}小时{reason_text}\n\n请点击审批"
+    link_url = f"https://x.dysobo.cn/kq/?page=timeoff"
+    title = f"📋 {type_name}申请 · 待审批"
+    reason_text = f'<div class="normal">💬 事由：{request_data.reason}</div>' if request_data.reason else ""
+    content = (
+        f'<div class="highlight">{current_user.name} 提交了{type_name}申请</div>'
+        f'<div class="normal">📅 日期：{request_data.date}</div>'
+        f'<div class="normal">⏱ 时长：{request_data.hours} 小时</div>'
+        f'{reason_text}'
+        f'<div class="gray">请及时审批处理</div>'
+    )
     admins = db.query(database.User).filter(database.User.role == "admin").all()
     for admin in admins:
         send_wechat_message(admin.id, title, content, link_url, db)
@@ -771,7 +785,7 @@ def create_time_off(request_data: TimeOffRequestCreate, current_user: database.U
     # 发送 Webhook 通知
     webhook_config = load_webhook_config()
     if webhook_config.get("enabled") and webhook_config.get("notify_time_off"):
-        link_url = f"http://x.dysobo.cn:8888/kq/?page=timeoff&id={request.id}"
+        link_url = f"https://x.dysobo.cn/kq/?page=timeoff&id={request.id}"
         content = f"申请人：{current_user.name}\n类型：{type_name}\n日期：{request_data.date}\n时长：{request_data.hours}小时\n事由：{request_data.reason}\n\n👉 点击审批：{link_url}"
         send_webhook(
             webhook_config,
@@ -799,10 +813,17 @@ def approve_time_off(request_id: int, approve_data: TimeOffRequestApprove, curre
     type_names = {"U":"调休","B":"病假","S":"事假","H":"婚假","C":"产假","L":"护理假","J":"经期假","Y":"孕期假","R":"哺乳假","N":"年休假","T":"探亲假","Z":"丧假"}
     type_name = type_names.get(request.type, "调休")
     status_text = "已批准" if approve_data.approved else "已拒绝"
-    title = f"{type_name}申请{status_text}"
-    comment_text = f"\n审批留言：{approve_data.admin_comment}" if approve_data.admin_comment else ""
-    content = f"您的{type_name}申请{status_text}\n日期：{request.date}\n时长：{request.hours}小时{comment_text}"
-    link_url = f"http://x.dysobo.cn:8888/kq/?page=timeoff"
+    status_emoji = "✅" if approve_data.approved else "❌"
+    title = f"{status_emoji} {type_name}申请{status_text}"
+    comment_text = f'<div class="normal">💬 留言：{approve_data.admin_comment}</div>' if approve_data.admin_comment else ""
+    content = (
+        f'<div class="highlight">您的{type_name}申请{status_text}</div>'
+        f'<div class="normal">📅 日期：{request.date}</div>'
+        f'<div class="normal">⏱ 时长：{request.hours} 小时</div>'
+        f'{comment_text}'
+        f'<div class="gray">点击查看详情</div>'
+    )
+    link_url = f"https://x.dysobo.cn/kq/?page=timeoff"
     send_wechat_message(request.user_id, title, content, link_url, db)
     
     return {"message": "申请已" + ("批准" if approve_data.approved else "拒绝")}
@@ -957,10 +978,16 @@ def create_overtime(record_data: OvertimeRecordCreate, current_user: database.Us
     db.refresh(record)
     
     # 发送企业微信推送给所有管理员
-    link_url = f"http://x.dysobo.cn:8888/kq/?page=overtime"
-    title = "⏰ 加班记录 - 待确认"
-    reason_text = f"\n事由：{record_data.reason}" if record_data.reason else ""
-    content = f"申请人：{current_user.name}\n日期：{record_data.date}\n时长：{record_data.hours}小时{reason_text}\n\n请点击确认"
+    link_url = f"https://x.dysobo.cn/kq/?page=overtime"
+    title = "📋 加班申请 · 待确认"
+    reason_text = f'<div class="normal">💬 事由：{record_data.reason}</div>' if record_data.reason else ""
+    content = (
+        f'<div class="highlight">{current_user.name} 提交了加班申请</div>'
+        f'<div class="normal">📅 日期：{record_data.date}</div>'
+        f'<div class="normal">⏱ 时长：{record_data.hours} 小时</div>'
+        f'{reason_text}'
+        f'<div class="gray">请及时确认处理</div>'
+    )
     admins = db.query(database.User).filter(database.User.role == "admin").all()
     for admin in admins:
         send_wechat_message(admin.id, title, content, link_url, db)
@@ -968,7 +995,7 @@ def create_overtime(record_data: OvertimeRecordCreate, current_user: database.Us
     # 发送 Webhook 通知
     webhook_config = load_webhook_config()
     if webhook_config.get("enabled") and webhook_config.get("notify_overtime"):
-        link_url = f"http://x.dysobo.cn:8888/kq/?page=overtime&id={record.id}"
+        link_url = f"https://x.dysobo.cn/kq/?page=overtime&id={record.id}"
         content = f"申请人：{current_user.name}\n日期：{record_data.date}\n时长：{record_data.hours}小时\n事由：{record_data.reason}\n\n👉 点击确认：{link_url}"
         send_webhook(
             webhook_config,
@@ -993,10 +1020,17 @@ def approve_overtime(record_id: int, approve_data: OvertimeRecordApprove, curren
     db.commit()
     
     status_text = "已确认" if approve_data.approved else "已拒绝"
-    title = f"加班记录{status_text}"
-    comment_text = f"\n审批留言：{approve_data.admin_comment}" if approve_data.admin_comment else ""
-    content = f"您的加班记录{status_text}\n日期：{record.date}\n时长：{record.hours}小时{comment_text}"
-    link_url = f"http://x.dysobo.cn:8888/kq/?page=overtime"
+    status_emoji = "✅" if approve_data.approved else "❌"
+    title = f"{status_emoji} 加班申请{status_text}"
+    comment_text = f'<div class="normal">💬 留言：{approve_data.admin_comment}</div>' if approve_data.admin_comment else ""
+    content = (
+        f'<div class="highlight">您的加班申请{status_text}</div>'
+        f'<div class="normal">📅 日期：{record.date}</div>'
+        f'<div class="normal">⏱ 时长：{record.hours} 小时</div>'
+        f'{comment_text}'
+        f'<div class="gray">点击查看详情</div>'
+    )
+    link_url = f"https://x.dysobo.cn/kq/?page=overtime"
     send_wechat_message(record.user_id, title, content, link_url, db)
     
     return {"message": "加班记录已" + ("批准" if approve_data.approved else "拒绝")}
@@ -1199,13 +1233,16 @@ def export_backup(current_user: database.User = Depends(get_current_user), db: S
     time_off = db.query(database.TimeOffRequest).all()
     overtime = db.query(database.OvertimeRecord).all()
     
+    wechat_config = db.query(database.WechatConfig).first()
+
     backup_data = {
         "export_time": datetime.now().isoformat(),
-        "version": "1.0",
+        "version": "2.0",
         "users": [
             {
-                "id": u.id, "name": u.name, "role": u.role, 
-                "phone": u.phone, "created_at": str(u.created_at)
+                "id": u.id, "name": u.name, "password": u.password, "role": u.role,
+                "phone": u.phone, "wechat_user_id": u.wechat_user_id,
+                "enable_push": u.enable_push, "created_at": str(u.created_at)
             } for u in users
         ],
         "shifts": [
@@ -1217,8 +1254,9 @@ def export_backup(current_user: database.User = Depends(get_current_user), db: S
         "time_off_requests": [
             {
                 "id": t.id, "user_id": t.user_id, "date": str(t.date),
-                "hours": t.hours, "reason": t.reason, "status": t.status,
-                "approved_by": t.approved_by, "created_at": str(t.created_at)
+                "hours": t.hours, "type": t.type, "reason": t.reason, "status": t.status,
+                "approved_by": t.approved_by, "created_at": str(t.created_at),
+                "updated_at": str(t.updated_at)
             } for t in time_off
         ],
         "overtime_records": [
@@ -1227,7 +1265,16 @@ def export_backup(current_user: database.User = Depends(get_current_user), db: S
                 "hours": o.hours, "reason": o.reason, "status": o.status,
                 "approved_by": o.approved_by, "created_at": str(o.created_at)
             } for o in overtime
-        ]
+        ],
+        "wechat_config": {
+            "api_url": wechat_config.api_url,
+            "corp_id": wechat_config.corp_id,
+            "secret": wechat_config.secret,
+            "agent_id": wechat_config.agent_id,
+            "token": wechat_config.token,
+            "encoding_aes_key": wechat_config.encoding_aes_key,
+            "enabled": wechat_config.enabled
+        } if wechat_config else None
     }
     
     return {"filename": f"考勤备份_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json", "data": backup_data}
@@ -1254,25 +1301,28 @@ def import_backup(backup_data: dict, current_user: database.User = Depends(get_c
                 continue
             user = database.User(
                 id=u["id"], name=u["name"], role=u["role"],
-                phone=u.get("phone"), password=admin_user.password if admin_user else get_password_hash("123456")
+                phone=u.get("phone"),
+                password=u.get("password", admin_user.password if admin_user else get_password_hash("123456")),
+                wechat_user_id=u.get("wechat_user_id"),
+                enable_push=u.get("enable_push", True)
             )
             db.add(user)
-        
+
         for s in backup_data.get("shifts", []):
             shift = database.Shift(
                 id=s["id"], user_id=s["user_id"], date=s["date"],
                 shift_type=s["shift_type"], note=s.get("note")
             )
             db.add(shift)
-        
+
         for t in backup_data.get("time_off_requests", []):
             time_off_req = database.TimeOffRequest(
                 id=t["id"], user_id=t["user_id"], date=t["date"],
-                hours=t["hours"], reason=t.get("reason"), status=t["status"],
-                approved_by=t.get("approved_by")
+                hours=t["hours"], type=t.get("type", "U"), reason=t.get("reason"),
+                status=t["status"], approved_by=t.get("approved_by")
             )
             db.add(time_off_req)
-        
+
         for o in backup_data.get("overtime_records", []):
             overtime_rec = database.OvertimeRecord(
                 id=o["id"], user_id=o["user_id"], date=o["date"],
@@ -1280,6 +1330,21 @@ def import_backup(backup_data: dict, current_user: database.User = Depends(get_c
                 approved_by=o.get("approved_by")
             )
             db.add(overtime_rec)
+
+        # 恢复企业微信配置
+        wc = backup_data.get("wechat_config")
+        if wc:
+            db.query(database.WechatConfig).delete()
+            wechat_cfg = database.WechatConfig(
+                api_url=wc.get("api_url", ""),
+                corp_id=wc.get("corp_id", ""),
+                secret=wc.get("secret", ""),
+                agent_id=wc.get("agent_id", 0),
+                token=wc.get("token", ""),
+                encoding_aes_key=wc.get("encoding_aes_key", ""),
+                enabled=wc.get("enabled", False)
+            )
+            db.add(wechat_cfg)
         
         db.commit()
         
