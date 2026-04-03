@@ -41,7 +41,7 @@ def verify_password(plain_password, hashed_password):
 
 security = HTTPBearer()
 
-app = FastAPI(title="考勤管理系统", version="4.0.0")
+app = FastAPI(title="考勤管理系统", version="4.2.0")
 
 # CORS 配置
 app.add_middleware(
@@ -170,7 +170,7 @@ def startup():
 
 @app.get("/")
 def root():
-    return {"message": "考勤管理系统 API", "version": "4.0.0"}
+    return {"message": "考勤管理系统 API", "version": "4.2.0"}
 
 # --- 用户认证 ---
 
@@ -838,6 +838,7 @@ def list_time_off(user_id: Optional[int] = None, status: Optional[str] = None, c
             "hours": r.hours,
             "type": r.type,
             "reason": r.reason,
+            "admin_comment": r.admin_comment,
             "status": r.status,
             "created_at": str(r.created_at)
         })
@@ -898,6 +899,7 @@ def approve_time_off(request_id: int, approve_data: TimeOffRequestApprove, curre
     
     request.status = "approved" if approve_data.approved else "rejected"
     request.approved_by = current_user.id
+    request.admin_comment = approve_data.admin_comment
     request.updated_at = datetime.now()
     db.commit()
     
@@ -1002,6 +1004,7 @@ def list_overtime(user_id: Optional[int] = None, status: Optional[str] = None, c
             "date": str(r.date),
             "hours": r.hours,
             "reason": r.reason,
+            "admin_comment": r.admin_comment,
             "status": r.status,
             "created_at": str(r.created_at)
         })
@@ -1086,6 +1089,7 @@ def approve_overtime(record_id: int, approve_data: OvertimeRecordApprove, curren
     
     record.status = "approved" if approve_data.approved else "rejected"
     record.approved_by = current_user.id
+    record.admin_comment = approve_data.admin_comment
     db.commit()
     
     status_text = "已确认" if approve_data.approved else "已拒绝"
@@ -1348,7 +1352,7 @@ def export_backup(include_sensitive: bool = False, current_user: database.User =
             {
                 "id": t.id, "user_id": t.user_id, "date": str(t.date),
                 "hours": t.hours, "type": t.type, "reason": t.reason, "status": t.status,
-                "approved_by": t.approved_by, "created_at": str(t.created_at),
+                "approved_by": t.approved_by, "admin_comment": t.admin_comment, "created_at": str(t.created_at),
                 "updated_at": str(t.updated_at)
             } for t in time_off
         ],
@@ -1356,7 +1360,7 @@ def export_backup(include_sensitive: bool = False, current_user: database.User =
             {
                 "id": o.id, "user_id": o.user_id, "date": str(o.date),
                 "hours": o.hours, "reason": o.reason, "status": o.status,
-                "approved_by": o.approved_by, "created_at": str(o.created_at)
+                "approved_by": o.approved_by, "admin_comment": o.admin_comment, "created_at": str(o.created_at)
             } for o in overtime
         ],
         "wechat_config": {
@@ -1430,7 +1434,7 @@ def import_backup(backup_data: dict, current_user: database.User = Depends(get_c
             time_off_req = database.TimeOffRequest(
                 id=t["id"], user_id=t["user_id"], date=parse_date_value(t["date"]),
                 hours=t["hours"], type=t.get("type", "U"), reason=t.get("reason"),
-                status=t["status"], approved_by=t.get("approved_by"),
+                status=t["status"], approved_by=t.get("approved_by"), admin_comment=t.get("admin_comment"),
                 created_at=parse_datetime_value(t.get("created_at")) or datetime.now(),
                 updated_at=parse_datetime_value(t.get("updated_at")) or datetime.now()
             )
@@ -1440,7 +1444,7 @@ def import_backup(backup_data: dict, current_user: database.User = Depends(get_c
             overtime_rec = database.OvertimeRecord(
                 id=o["id"], user_id=o["user_id"], date=parse_date_value(o["date"]),
                 hours=o["hours"], reason=o.get("reason"), status=o["status"],
-                approved_by=o.get("approved_by"),
+                approved_by=o.get("approved_by"), admin_comment=o.get("admin_comment"),
                 created_at=parse_datetime_value(o.get("created_at")) or datetime.now()
             )
             db.add(overtime_rec)

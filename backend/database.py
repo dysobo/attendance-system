@@ -47,6 +47,7 @@ class TimeOffRequest(Base):
     hours = Column(Float, default=8.0)  # 调休时长（小时）
     type = Column(String(1), default="U")  # 假期类型：U 调休/B 病假/S 事假/H 婚假/C 产假/L 护理假/J 经期假/Y 孕期假/R 哺乳假/N 年休假/T 探亲假/Z 丧假
     reason = Column(Text)
+    admin_comment = Column(Text)
     status = Column(String(20), default="pending")  # pending/approved/rejected
     approved_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.now)
@@ -62,6 +63,7 @@ class OvertimeRecord(Base):
     date = Column(Date, nullable=False, index=True)
     hours = Column(Float, nullable=False)
     reason = Column(Text)
+    admin_comment = Column(Text)
     status = Column(String(20), default="pending")  # pending/approved/rejected
     approved_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.now)
@@ -99,6 +101,18 @@ def init_db():
                 conn.execute(text(statement))
             except Exception as e:
                 print(f"⚠️ 创建索引失败 {index_name}: {e}")
+
+        column_statements = [
+            ("time_off_requests", "admin_comment", "ALTER TABLE time_off_requests ADD COLUMN admin_comment TEXT"),
+            ("overtime_records", "admin_comment", "ALTER TABLE overtime_records ADD COLUMN admin_comment TEXT")
+        ]
+        for table_name, column_name, statement in column_statements:
+            try:
+                existing_columns = conn.execute(text(f"PRAGMA table_info({table_name})")).fetchall()
+                if not any(column[1] == column_name for column in existing_columns):
+                    conn.execute(text(statement))
+            except Exception as e:
+                print(f"⚠️ 补充字段失败 {table_name}.{column_name}: {e}")
 
 
 def get_db():

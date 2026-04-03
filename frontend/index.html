@@ -62,6 +62,89 @@
         .recent-shift-phone:hover { background: #d9f7e5; color: #14733f; }
         .recent-shift-note { font-size: 13px; line-height: 1.5; color: #5d6b82; background: #f7f9fc; border-radius: 10px; padding: 9px 10px; word-break: break-word; }
         .recent-shift-note.empty { color: #98a4b5; }
+        .mobile-record-list { gap: 10px; margin-top: 15px; }
+        .mobile-record-card {
+            background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+            border: 1px solid #e6edf7;
+            border-radius: 16px;
+            padding: 14px;
+            box-shadow: 0 8px 22px rgba(31,71,136,0.08);
+        }
+        .mobile-record-card-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 10px;
+        }
+        .mobile-record-date {
+            font-size: 15px;
+            font-weight: 700;
+            color: #22324a;
+        }
+        .mobile-record-subtitle {
+            margin-top: 4px;
+            font-size: 12px;
+            color: #7b8799;
+        }
+        .mobile-record-tags {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            gap: 6px;
+        }
+        .mobile-record-main {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        .mobile-record-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: #eef4ff;
+            color: #35507a;
+            font-size: 12px;
+            line-height: 1;
+        }
+        .mobile-record-pill.phone {
+            text-decoration: none;
+            cursor: pointer;
+            background: #e8fff0;
+            color: #1f8f52;
+        }
+        .mobile-record-pill.phone:hover {
+            background: #d9f7e5;
+            color: #14733f;
+        }
+        .mobile-record-body {
+            display: grid;
+            gap: 8px;
+        }
+        .mobile-record-block {
+            font-size: 13px;
+            line-height: 1.55;
+            color: #50617b;
+            background: #f7f9fc;
+            border-radius: 10px;
+            padding: 9px 10px;
+            word-break: break-word;
+        }
+        .mobile-record-block.empty {
+            color: #98a4b5;
+        }
+        .mobile-record-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        .mobile-record-actions .el-button {
+            margin: 0;
+        }
         
         /* 移动端优化 */
         .mobile-menu-btn { display: none; position: fixed; top: 12px; left: 12px; z-index: 1003; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; border: none; padding: 10px 14px; border-radius: 10px; font-size: 18px; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
@@ -86,10 +169,16 @@
             .desktop-only { display: none !important; }
             .mobile-only { display: block !important; }
             .recent-shift-list.mobile-only { display: grid !important; }
+            .mobile-record-list.mobile-only { display: grid !important; }
             .recent-shift-card { padding: 12px; border-radius: 12px; }
             .recent-shift-date { font-size: 14px; }
             .recent-shift-pill { font-size: 11px; padding: 5px 9px; }
             .recent-shift-note { font-size: 12px; padding: 8px 9px; }
+            .mobile-record-card { padding: 12px; border-radius: 14px; }
+            .mobile-record-date { font-size: 14px; }
+            .mobile-record-pill { font-size: 11px; padding: 5px 9px; }
+            .mobile-record-block { font-size: 12px; padding: 8px 9px; }
+            .mobile-record-actions { gap: 6px; }
             .heatmap-panel { padding: 16px; border-radius: 18px; }
             .heatmap-panel-head { flex-direction: column; align-items: flex-start; }
             .heatmap-year-badge { padding: 8px 12px; }
@@ -559,7 +648,7 @@
                         <!-- 管理员视图 -->
                         <div v-if="currentUser.role==='admin'">
                             <el-button type="primary" @click="openShiftDialog(false)">➕ 添加排班</el-button>
-                            <div class="table-wrapper" style="margin-top:15px">
+                            <div class="table-wrapper desktop-only" style="margin-top:15px">
                                 <el-table :data="shifts" stripe>
                                     <el-table-column prop="date" label="日期" width="100"></el-table-column>
                                     <el-table-column prop="user_name" label="姓名" width="80"></el-table-column>
@@ -578,6 +667,32 @@
                                     </el-table-column>
                                 </el-table>
                             </div>
+                            <div class="mobile-record-list mobile-only" v-if="shifts.length>0">
+                                <div class="mobile-record-card" v-for="item in shifts" :key="item.id">
+                                    <div class="mobile-record-card-head">
+                                        <div>
+                                            <div class="mobile-record-date">{{ item.date }}</div>
+                                            <div class="mobile-record-subtitle">排班记录</div>
+                                        </div>
+                                        <div class="mobile-record-tags">
+                                            <el-tag :type="item.shift_type==='早班'?'success':item.shift_type==='晚班'?'warning':'info'" size="small">{{ item.shift_type }}</el-tag>
+                                        </div>
+                                    </div>
+                                    <div class="mobile-record-main">
+                                        <div class="mobile-record-pill">👤 {{ item.user_name }}</div>
+                                    </div>
+                                    <div class="mobile-record-body">
+                                        <div class="mobile-record-block" :class="{ empty: !item.note || item.note === '-' }">
+                                            {{ item.note && item.note !== '-' ? item.note : '暂无备注' }}
+                                        </div>
+                                    </div>
+                                    <div class="mobile-record-actions">
+                                        <el-button size="small" @click="openShiftDialog(true, item)">编辑</el-button>
+                                        <el-button size="small" type="warning" @click="notifyShift(item)">提醒</el-button>
+                                        <el-button size="small" type="danger" @click="confirmDeleteShift(item.id)">删除</el-button>
+                                    </div>
+                                </div>
+                            </div>
                             <div v-if="shifts.length===0" style="text-align:center;padding:40px;color:#999">
                                 <div style="font-size:48px;margin-bottom:10px">📭</div>
                                 <div>暂无排班记录</div>
@@ -590,7 +705,7 @@
                                 <h3 style="margin-bottom:10px">📅 我的排班</h3>
                                 <p style="font-size:13px;opacity:0.9">显示范围：近 3 个月 + 后 1 个月</p>
                             </div>
-                            <div class="table-wrapper">
+                            <div class="table-wrapper desktop-only">
                                 <el-table :data="myShifts" stripe>
                                     <el-table-column prop="date" label="日期" width="100"></el-table-column>
                                     <el-table-column prop="shift_type" label="班次" width="80">
@@ -600,6 +715,24 @@
                                     </el-table-column>
                                     <el-table-column prop="note" label="备注"></el-table-column>
                                 </el-table>
+                            </div>
+                            <div class="mobile-record-list mobile-only" v-if="myShifts.length>0">
+                                <div class="mobile-record-card" v-for="item in myShifts" :key="item.id">
+                                    <div class="mobile-record-card-head">
+                                        <div>
+                                            <div class="mobile-record-date">{{ item.date }}</div>
+                                            <div class="mobile-record-subtitle">我的排班</div>
+                                        </div>
+                                        <div class="mobile-record-tags">
+                                            <el-tag :type="item.shift_type==='早班'?'success':item.shift_type==='晚班'?'warning':'info'" size="small">{{ item.shift_type }}</el-tag>
+                                        </div>
+                                    </div>
+                                    <div class="mobile-record-body">
+                                        <div class="mobile-record-block" :class="{ empty: !item.note || item.note === '-' }">
+                                            {{ item.note && item.note !== '-' ? item.note : '暂无备注' }}
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                             <div v-if="myShifts.length===0" style="text-align:center;padding:60px 20px;color:#999">
                                 <div style="font-size:64px;margin-bottom:15px">📭</div>
@@ -614,7 +747,7 @@
                                 <h3 style="margin-bottom:10px">👥 班组排班</h3>
                                 <p style="font-size:13px;opacity:0.9">显示范围：今日往后 30 天（含今日）</p>
                             </div>
-                            <div class="table-wrapper">
+                            <div class="table-wrapper desktop-only">
                                 <el-table :data="teamShifts" stripe>
                                     <el-table-column prop="date" label="日期" width="100"></el-table-column>
                                     <el-table-column prop="user_name" label="姓名" width="80"></el-table-column>
@@ -625,6 +758,23 @@
                                     </el-table-column>
                                     <el-table-column prop="phone" label="联系方式" width="120"></el-table-column>
                                 </el-table>
+                            </div>
+                            <div class="mobile-record-list mobile-only" v-if="teamShifts.length>0">
+                                <div class="mobile-record-card" v-for="item in teamShifts" :key="item.id">
+                                    <div class="mobile-record-card-head">
+                                        <div>
+                                            <div class="mobile-record-date">{{ item.date }}</div>
+                                            <div class="mobile-record-subtitle">班组排班</div>
+                                        </div>
+                                        <div class="mobile-record-tags">
+                                            <el-tag :type="item.shift_type==='早班'?'success':item.shift_type==='晚班'?'warning':'info'" size="small">{{ item.shift_type }}</el-tag>
+                                        </div>
+                                    </div>
+                                    <div class="mobile-record-main">
+                                        <div class="mobile-record-pill">👤 {{ item.user_name }}</div>
+                                        <a class="mobile-record-pill phone" v-if="item.phone && item.phone !== '-'" :href="'tel:' + item.phone.replace(/\s+/g, '')">📞 {{ item.phone }}</a>
+                                    </div>
+                                </div>
                             </div>
                             <div v-if="teamShifts.length===0" style="text-align:center;padding:60px 20px;color:#999">
                                 <div style="font-size:64px;margin-bottom:15px">📭</div>
@@ -637,7 +787,7 @@
                     <!-- 调休申请 -->
                     <div v-show="currentPage === 'timeoff'">
                         <el-button type="primary" @click="showTimeoffDialog=true">➕ 申请调休</el-button>
-                        <div class="table-wrapper" style="margin-top:15px">
+                        <div class="table-wrapper desktop-only" style="margin-top:15px">
                             <el-table :data="timeoffList" stripe>
                                 <el-table-column prop="date" label="日期" width="100"></el-table-column>
                                 <el-table-column prop="type" label="类型" width="60">
@@ -648,6 +798,11 @@
                                 <el-table-column prop="hours" label="时长" width="60"></el-table-column>
                                 <el-table-column prop="user_name" label="申请人" width="80"></el-table-column>
                                 <el-table-column prop="reason" label="事由"></el-table-column>
+                                <el-table-column prop="admin_comment" label="审批意见">
+                                    <template #default="scope">
+                                        {{ scope.row.admin_comment || '-' }}
+                                    </template>
+                                </el-table-column>
                                 <el-table-column prop="status" label="状态" width="80">
                                     <template #default="scope">
                                         <el-tag :type="scope.row.status==='approved'?'success':scope.row.status==='rejected'?'danger':'warning'" size="small">{{ scope.row.status==='approved'?'已批准':scope.row.status==='rejected'?'已拒绝':'待审批' }}</el-tag>
@@ -668,6 +823,45 @@
                                     </template>
                                 </el-table-column>
                             </el-table>
+                        </div>
+                        <div class="mobile-record-list mobile-only" v-if="timeoffList.length>0">
+                            <div class="mobile-record-card" v-for="item in timeoffList" :key="item.id">
+                                <div class="mobile-record-card-head">
+                                    <div>
+                                        <div class="mobile-record-date">{{ item.date }}</div>
+                                        <div class="mobile-record-subtitle">{{ item.user_name || currentUser.name }}</div>
+                                    </div>
+                                    <div class="mobile-record-tags">
+                                        <el-tag size="small">{{ item.type || 'U' }}</el-tag>
+                                        <el-tag :type="item.status==='approved'?'success':item.status==='rejected'?'danger':'warning'" size="small">{{ item.status==='approved'?'已批准':item.status==='rejected'?'已拒绝':'待审批' }}</el-tag>
+                                    </div>
+                                </div>
+                                <div class="mobile-record-main">
+                                    <div class="mobile-record-pill">🕒 {{ item.hours }} 小时</div>
+                                </div>
+                                <div class="mobile-record-body">
+                                    <div class="mobile-record-block" :class="{ empty: !item.reason }">
+                                        {{ item.reason || '暂无事由' }}
+                                    </div>
+                                    <div class="mobile-record-block" :class="{ empty: !item.admin_comment }">
+                                        {{ item.admin_comment ? '审批意见：' + item.admin_comment : '暂无审批意见' }}
+                                    </div>
+                                </div>
+                                <div class="mobile-record-actions">
+                                    <template v-if="currentUser.role==='admin'">
+                                        <el-button v-if="item.status==='pending'" size="small" type="success" @click="openApproveTimeoff(item)">审批</el-button>
+                                        <el-button size="small" @click="openEditTimeoff(item)">编辑</el-button>
+                                        <el-button size="small" type="danger" @click="confirmDeleteTimeoff(item.id)">删除</el-button>
+                                    </template>
+                                    <template v-else-if="Number(item.user_id) === Number(currentUser.id)">
+                                        <el-button v-if="item.status==='pending' || item.status==='rejected'" size="small" type="danger" @click="confirmDeleteTimeoff(item.id)">撤销</el-button>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
+                        <div v-if="timeoffList.length===0" style="text-align:center;padding:40px;color:#999">
+                            <div style="font-size:48px;margin-bottom:10px">📭</div>
+                            <div>暂无调休记录</div>
                         </div>
                     </div>
                     
@@ -792,12 +986,17 @@
                             </div>
                         </div>
                         
-                        <div class="table-wrapper" style="margin-top:20px">
+                        <div class="table-wrapper desktop-only" style="margin-top:20px">
                             <el-table :data="overtimeList" stripe>
                                 <el-table-column prop="date" label="日期" width="100"></el-table-column>
                                 <el-table-column prop="hours" label="时长" width="60"></el-table-column>
                                 <el-table-column prop="user_name" label="申请人" width="80"></el-table-column>
                                 <el-table-column prop="reason" label="事由"></el-table-column>
+                                <el-table-column prop="admin_comment" label="审批意见">
+                                    <template #default="scope">
+                                        {{ scope.row.admin_comment || '-' }}
+                                    </template>
+                                </el-table-column>
                                 <el-table-column prop="status" label="状态" width="80">
                                     <template #default="scope">
                                         <el-tag :type="scope.row.status==='approved'?'success':scope.row.status==='rejected'?'danger':'warning'" size="small">{{ scope.row.status==='approved'?'已确认':scope.row.status==='rejected'?'已拒绝':'待确认' }}</el-tag>
@@ -818,6 +1017,44 @@
                                     </template>
                                 </el-table-column>
                             </el-table>
+                        </div>
+                        <div class="mobile-record-list mobile-only" v-if="overtimeList.length>0">
+                            <div class="mobile-record-card" v-for="item in overtimeList" :key="item.id">
+                                <div class="mobile-record-card-head">
+                                    <div>
+                                        <div class="mobile-record-date">{{ item.date }}</div>
+                                        <div class="mobile-record-subtitle">{{ item.user_name || currentUser.name }}</div>
+                                    </div>
+                                    <div class="mobile-record-tags">
+                                        <el-tag :type="item.status==='approved'?'success':item.status==='rejected'?'danger':'warning'" size="small">{{ item.status==='approved'?'已确认':item.status==='rejected'?'已拒绝':'待确认' }}</el-tag>
+                                    </div>
+                                </div>
+                                <div class="mobile-record-main">
+                                    <div class="mobile-record-pill">⏱️ {{ item.hours }} 小时</div>
+                                </div>
+                                <div class="mobile-record-body">
+                                    <div class="mobile-record-block" :class="{ empty: !item.reason }">
+                                        {{ item.reason || '暂无事由' }}
+                                    </div>
+                                    <div class="mobile-record-block" :class="{ empty: !item.admin_comment }">
+                                        {{ item.admin_comment ? '审批意见：' + item.admin_comment : '暂无审批意见' }}
+                                    </div>
+                                </div>
+                                <div class="mobile-record-actions">
+                                    <template v-if="currentUser.role==='admin'">
+                                        <el-button v-if="item.status==='pending'" size="small" type="success" @click="openApproveOvertime(item)">审批</el-button>
+                                        <el-button size="small" @click="openEditOvertime(item)">编辑</el-button>
+                                        <el-button size="small" type="danger" @click="confirmDeleteOvertime(item.id)">删除</el-button>
+                                    </template>
+                                    <template v-else-if="Number(item.user_id) === Number(currentUser.id)">
+                                        <el-button v-if="item.status==='pending' || item.status==='rejected'" size="small" type="danger" @click="confirmDeleteOvertime(item.id)">撤销</el-button>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
+                        <div v-if="overtimeList.length===0" style="text-align:center;padding:40px;color:#999">
+                            <div style="font-size:48px;margin-bottom:10px">📭</div>
+                            <div>暂无加班记录</div>
                         </div>
                     </div>
                     
@@ -1125,7 +1362,7 @@
     </div>
     
     <!-- 版本号 -->
-    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V4.0</a>
+    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V4.2</a>
     
     <script src="./api.js"></script>
     <script src="./session.js"></script>
