@@ -22,7 +22,7 @@ mkdir -p "$ATTENDANCE_DIR"/{backend,frontend,data}
 # 3. 复制文件
 echo "📋 复制文件..."
 cp -r ~/attendance-system/backend/* "$ATTENDANCE_DIR/backend/"
-cp ~/attendance-system/frontend/index.html "$ATTENDANCE_DIR/frontend/"
+cp -r ~/attendance-system/frontend/* "$ATTENDANCE_DIR/frontend/"
 
 # 4. 安装 Python 依赖
 echo "📦 安装 Python 依赖..."

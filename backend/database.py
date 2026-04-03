@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, Date, Float, DateTime, ForeignKey, Text, Boolean
+from sqlalchemy import create_engine, Column, Integer, String, Date, Float, DateTime, ForeignKey, Text, Boolean, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
@@ -87,6 +87,18 @@ class WechatConfig(Base):
 def init_db():
     """初始化数据库"""
     Base.metadata.create_all(bind=engine)
+    index_statements = [
+        ("idx_shifts_user_date_unique", "CREATE UNIQUE INDEX IF NOT EXISTS idx_shifts_user_date_unique ON shifts (user_id, date)"),
+        ("idx_shifts_date_user", "CREATE INDEX IF NOT EXISTS idx_shifts_date_user ON shifts (date, user_id)"),
+        ("idx_time_off_user_status_date", "CREATE INDEX IF NOT EXISTS idx_time_off_user_status_date ON time_off_requests (user_id, status, date)"),
+        ("idx_overtime_user_status_date", "CREATE INDEX IF NOT EXISTS idx_overtime_user_status_date ON overtime_records (user_id, status, date)")
+    ]
+    with engine.begin() as conn:
+        for index_name, statement in index_statements:
+            try:
+                conn.execute(text(statement))
+            except Exception as e:
+                print(f"⚠️ 创建索引失败 {index_name}: {e}")
 
 
 def get_db():
