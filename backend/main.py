@@ -582,19 +582,19 @@ def get_wechat_access_token(db: Session) -> str:
 def send_wechat_message(user_id: int, title: str, content: str, link_url: str = "", db: Session = None):
     if not db:
         return False
-    
+
     config = db.query(database.WechatConfig).filter(database.WechatConfig.enabled == True).first()
     if not config:
         return False
-    
+
     user = db.query(database.User).filter(database.User.id == user_id).first()
     if not user or not user.enable_push or not user.wechat_user_id:
         return False
-    
+
     access_token = get_wechat_access_token(db)
     if not access_token:
         return False
-    
+
     try:
         url = f"{config.api_url}/cgi-bin/message/send?access_token={access_token}"
         payload = {
@@ -608,10 +608,10 @@ def send_wechat_message(user_id: int, title: str, content: str, link_url: str = 
                 "btntxt": "查看详情"
             }
         }
-        
+
         response = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=10)
         result = response.json()
-        
+
         if result.get("errcode") == 0:
             print(f"✅ 企业微信消息发送成功：{user.name} - {title}")
             return True
@@ -621,6 +621,17 @@ def send_wechat_message(user_id: int, title: str, content: str, link_url: str = 
     except Exception as e:
         print(f"❌ 企业微信消息发送异常：{e}")
         return False
+
+
+def build_shift_notification(title: str, date_value, shift_type: str, note: Optional[str] = None, highlight_text: Optional[str] = None):
+    note_text = f'<div class="normal">📝 备注信息：{note}</div>' if note else ""
+    content = (
+        f'<div class="highlight">{highlight_text or f"你有近期 {date_value} 排班计划"}</div>'
+        f'<div class="normal">班次：{shift_type}</div>'
+        f'{note_text}'
+        f'<div class="gray">请注意查看</div>'
+    )
+    return title, content
 
 # --- 排班管理 ---
 
@@ -693,15 +704,7 @@ def create_shift(shift_data: ShiftCreate, current_user: database.User = Depends(
     db.commit()
     db.refresh(shift)
 
-    # 推送排班通知给组员
-    note_text = f'<div class="normal">📝 备注信息：{shift_data.note}</div>' if shift_data.note else ""
-    shift_title = "📅 排班通知"
-    shift_content = (
-        f'<div class="highlight">你有近期 {shift_data.date} 排班计划</div>'
-        f'<div class="normal">班次：{shift_data.shift_type}</div>'
-        f'{note_text}'
-        f'<div class="gray">请注意查看</div>'
-    )
+    shift_title, shift_content = build_shift_notification("📅 排班通知", shift_data.date, shift_data.shift_type, shift_data.note)
     send_wechat_message(user_id, shift_title, shift_content, "https://x.dysobo.cn/kq/", db)
 
     return {"id": shift.id, "message": "排班创建成功"}
@@ -723,14 +726,12 @@ def update_shift(shift_id: int, shift_data: ShiftUpdate, current_user: database.
     db.commit()
     db.refresh(shift)
 
-    # 推送排班变更通知给组员
-    note_text = f'<div class="normal">📝 备注信息：{shift.note}</div>' if shift.note else ""
-    shift_title = "📅 排班变更通知"
-    shift_content = (
-        f'<div class="highlight">你的 {shift.date} 排班已更新</div>'
-        f'<div class="normal">班次：{shift.shift_type}</div>'
-        f'{note_text}'
-        f'<div class="gray">请注意查看</div>'
+    shift_title, shift_content = build_shift_notification(
+        "📅 排班变更通知",
+        shift.date,
+        shift.shift_type,
+        shift.note,
+        f"你的 {shift.date} 排班已更新"
     )
     send_wechat_message(shift.user_id, shift_title, shift_content, "https://x.dysobo.cn/kq/", db)
 
@@ -759,19 +760,11 @@ def notify_shift(shift_id: int, current_user: database.User = Depends(get_curren
     if not shift:
         raise HTTPException(status_code=404, detail="排班不存在")
 
-    user = db.query(database.User).filter(database.User.id == shift.user_id).first()
-    note_text = f'<div class="normal">📝 备注信息：{shift.note}</div>' if shift.note else ""
-    title = "📢 产品试验室提醒"
-    content = (
-        f'<div class="highlight">你有近期 {shift.date} 排班计划</div>'
-        f'<div class="normal">班次：{shift.shift_type}</div>'
-        f'{note_text}'
-        f'<div class="gray">请注意查看</div>'
-    )
+    title, content = build_shift_notification("📢 产品试验室提醒", shift.date, shift.shift_type, shift.note)
     success = send_wechat_message(shift.user_id, title, content, "https://x.dysobo.cn/kq/", db)
 
     if success:
-        return {"message": f"已向 {user.name if user else '未知'} 发送排班提醒"}
+        return {"message": "排班提醒已发送"}
     else:
         raise HTTPException(status_code=500, detail="推送失败，请检查该用户是否绑定企业微信")
 
