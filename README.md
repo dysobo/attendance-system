@@ -77,7 +77,7 @@ attendance-system/
 │   ├── actions.js
 │   ├── heatmap.js
 │   ├── data-tools.js
-│   └── *.html                  # 历史页面/参考文件，当前线上入口为 index.html
+│   └── index.html
 ├── deploy/
 │   └── deploy.sh
 └── README.md
@@ -232,7 +232,6 @@ node --check frontend/heatmap.js
 
 - 密码存储仍是 SHA256，下一步应切换到 `bcrypt`
 - `backend/main.py` 仍然偏大，企业微信相关逻辑还可继续拆分
-- `frontend/` 下仍保留多个历史 HTML 文件，后续应清理
 
 ## 更新记录
 
