@@ -692,6 +692,18 @@ def create_shift(shift_data: ShiftCreate, current_user: database.User = Depends(
     db.add(shift)
     db.commit()
     db.refresh(shift)
+
+    # 推送排班通知给组员
+    note_text = f'<div class="normal">📝 备注信息：{shift_data.note}</div>' if shift_data.note else ""
+    shift_title = "📅 排班通知"
+    shift_content = (
+        f'<div class="highlight">你有近期 {shift_data.date} 排班计划</div>'
+        f'<div class="normal">班次：{shift_data.shift_type}</div>'
+        f'{note_text}'
+        f'<div class="gray">请注意查看</div>'
+    )
+    send_wechat_message(user_id, shift_title, shift_content, "https://x.dysobo.cn/kq/", db)
+
     return {"id": shift.id, "message": "排班创建成功"}
 
 @app.put("/api/shifts/{shift_id}")
@@ -707,9 +719,21 @@ def update_shift(shift_id: int, shift_data: ShiftUpdate, current_user: database.
         shift.shift_type = shift_data.shift_type
     if shift_data.note is not None:
         shift.note = shift_data.note
-    
+
     db.commit()
     db.refresh(shift)
+
+    # 推送排班变更通知给组员
+    note_text = f'<div class="normal">📝 备注信息：{shift.note}</div>' if shift.note else ""
+    shift_title = "📅 排班变更通知"
+    shift_content = (
+        f'<div class="highlight">你的 {shift.date} 排班已更新</div>'
+        f'<div class="normal">班次：{shift.shift_type}</div>'
+        f'{note_text}'
+        f'<div class="gray">请注意查看</div>'
+    )
+    send_wechat_message(shift.user_id, shift_title, shift_content, "https://x.dysobo.cn/kq/", db)
+
     return {"id": shift.id, "message": "排班更新成功"}
 
 @app.delete("/api/shifts/{shift_id}")
@@ -724,6 +748,32 @@ def delete_shift(shift_id: int, current_user: database.User = Depends(get_curren
     db.delete(shift)
     db.commit()
     return {"message": "排班删除成功"}
+
+@app.post("/api/shifts/{shift_id}/notify")
+def notify_shift(shift_id: int, current_user: database.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
+    """管理员手动推送排班提醒"""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+
+    shift = db.query(database.Shift).filter(database.Shift.id == shift_id).first()
+    if not shift:
+        raise HTTPException(status_code=404, detail="排班不存在")
+
+    user = db.query(database.User).filter(database.User.id == shift.user_id).first()
+    note_text = f'<div class="normal">📝 备注信息：{shift.note}</div>' if shift.note else ""
+    title = "📢 产品试验室提醒"
+    content = (
+        f'<div class="highlight">你有近期 {shift.date} 排班计划</div>'
+        f'<div class="normal">班次：{shift.shift_type}</div>'
+        f'{note_text}'
+        f'<div class="gray">请注意查看</div>'
+    )
+    success = send_wechat_message(shift.user_id, title, content, "https://x.dysobo.cn/kq/", db)
+
+    if success:
+        return {"message": f"已向 {user.name if user else '未知'} 发送排班提醒"}
+    else:
+        raise HTTPException(status_code=500, detail="推送失败，请检查该用户是否绑定企业微信")
 
 # --- 调休申请 ---
 
@@ -825,7 +875,20 @@ def approve_time_off(request_id: int, approve_data: TimeOffRequestApprove, curre
     )
     link_url = f"https://x.dysobo.cn/kq/?page=timeoff"
     send_wechat_message(request.user_id, title, content, link_url, db)
-    
+
+    # 推送给管理员自己确认
+    applicant = db.query(database.User).filter(database.User.id == request.user_id).first()
+    applicant_name = applicant.name if applicant else "未知"
+    admin_title = f"{status_emoji} 已审批 · {type_name}申请"
+    admin_content = (
+        f'<div class="highlight">你已{status_text} {applicant_name} 的{type_name}申请</div>'
+        f'<div class="normal">📅 日期：{request.date}</div>'
+        f'<div class="normal">⏱ 时长：{request.hours} 小时</div>'
+        f'{comment_text}'
+        f'<div class="gray">点击查看详情</div>'
+    )
+    send_wechat_message(current_user.id, admin_title, admin_content, link_url, db)
+
     return {"message": "申请已" + ("批准" if approve_data.approved else "拒绝")}
 
 @app.put("/api/time-off/{request_id}")
@@ -1032,7 +1095,20 @@ def approve_overtime(record_id: int, approve_data: OvertimeRecordApprove, curren
     )
     link_url = f"https://x.dysobo.cn/kq/?page=overtime"
     send_wechat_message(record.user_id, title, content, link_url, db)
-    
+
+    # 推送给管理员自己确认
+    applicant = db.query(database.User).filter(database.User.id == record.user_id).first()
+    applicant_name = applicant.name if applicant else "未知"
+    admin_title = f"{status_emoji} 已审批 · 加班申请"
+    admin_content = (
+        f'<div class="highlight">你已{status_text} {applicant_name} 的加班申请</div>'
+        f'<div class="normal">📅 日期：{record.date}</div>'
+        f'<div class="normal">⏱ 时长：{record.hours} 小时</div>'
+        f'{comment_text}'
+        f'<div class="gray">点击查看详情</div>'
+    )
+    send_wechat_message(current_user.id, admin_title, admin_content, link_url, db)
+
     return {"message": "加班记录已" + ("批准" if approve_data.approved else "拒绝")}
 
 @app.put("/api/overtime/{record_id}")

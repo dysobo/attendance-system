@@ -323,9 +323,10 @@
                                         </template>
                                     </el-table-column>
                                     <el-table-column prop="note" label="备注"></el-table-column>
-                                    <el-table-column label="操作" width="180">
+                                    <el-table-column label="操作" width="240">
                                         <template #default="scope">
                                             <el-button size="small" @click="openShiftDialog(true, scope.row)">编辑</el-button>
+                                            <el-button size="small" type="warning" @click="notifyShift(scope.row)">提醒</el-button>
                                             <el-button size="small" type="danger" @click="confirmDeleteShift(scope.row.id)">删除</el-button>
                                         </template>
                                     </el-table-column>
@@ -1277,6 +1278,14 @@
                 const confirmDeleteOvertime = async (id) => { if(confirm('确定删除？')) { await api('/overtime/'+id, { method: 'DELETE' }); await loadData(); } };
                 const confirmDeleteUser = async (id) => { if(confirm('确定删除？')) { await api('/users/'+id, { method: 'DELETE' }); await loadData(); } };
                 const confirmDeleteShift = async (id) => { if(confirm('确定删除？')) { await api('/shifts/'+id, { method: 'DELETE' }); await loadData(); } };
+                const notifyShift = async (row) => {
+                    try {
+                        const res = await api('/shifts/'+row.id+'/notify', { method: 'POST' });
+                        alert(res.message || '提醒已发送');
+                    } catch(e) {
+                        alert('推送失败：' + (e.message || '请检查该用户是否绑定企业微信'));
+                    }
+                };
                 
                 const openShiftDialog = (edit, row) => {
                     editingShiftId.value = row ? row.id : null;
@@ -1455,7 +1464,7 @@
                     }
                 });
                 
-                return { currentUser, currentPage, menuOpen, loginForm, users, shifts, timeoffList, overtimeList, myStats, webhookForm, wechatConfig, passwordForm, exportMonth, exportYear, importFile, showShiftDialog, showTimeoffDialog, showOvertimeDialog, showUserDialog, showApproveTimeoffDialog, showApproveOvertimeDialog, shiftForm, timeoffForm, overtimeForm, userForm, approveForm, pageTitle, recentShifts, myShifts, teamShifts, months, monthLabels, monthWidths, weekData, tooltip, handleLogin, handleLogout, loadData, loadUserInfo, openShiftDialog, saveShift, confirmDeleteShift, saveTimeoff, saveOvertime, saveUser, openApproveTimeoff, doApproveTimeoff, openApproveOvertime, doApproveOvertime, openEditTimeoff, openEditOvertime, openEditUser, confirmDeleteTimeoff, confirmDeleteOvertime, confirmDeleteUser, toggleUserRole, openResetPassword, saveWebhookConfig, testWebhook, saveWechatConfig, testWechatPush, exportMonthlyStats, exportBackup, importBackup, changePassword, getCellClass, showTooltip, hideTooltip };
+                return { currentUser, currentPage, menuOpen, loginForm, users, shifts, timeoffList, overtimeList, myStats, webhookForm, wechatConfig, passwordForm, exportMonth, exportYear, importFile, showShiftDialog, showTimeoffDialog, showOvertimeDialog, showUserDialog, showApproveTimeoffDialog, showApproveOvertimeDialog, shiftForm, timeoffForm, overtimeForm, userForm, approveForm, pageTitle, recentShifts, myShifts, teamShifts, months, monthLabels, monthWidths, weekData, tooltip, handleLogin, handleLogout, loadData, loadUserInfo, openShiftDialog, saveShift, confirmDeleteShift, notifyShift, saveTimeoff, saveOvertime, saveUser, openApproveTimeoff, doApproveTimeoff, openApproveOvertime, doApproveOvertime, openEditTimeoff, openEditOvertime, openEditUser, confirmDeleteTimeoff, confirmDeleteOvertime, confirmDeleteUser, toggleUserRole, openResetPassword, saveWebhookConfig, testWebhook, saveWechatConfig, testWechatPush, exportMonthlyStats, exportBackup, importBackup, changePassword, getCellClass, showTooltip, hideTooltip };
             }
         }).use(ElementPlus).mount('#app');
     </script>
