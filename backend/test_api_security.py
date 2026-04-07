@@ -132,6 +132,40 @@ class APISecurityTests(unittest.TestCase):
             self.assertEqual(len(users), 1)
             self.assertEqual(users[0].name, "admin")
 
+    def test_admin_time_off_list_is_sorted_by_request_date_desc(self):
+        self.create_member("member_a")
+        member_headers = {"Authorization": f"Bearer {self.login('member_a', 'member123')}"}
+
+        for request_date in ["2026-04-01", "2026-04-03", "2026-04-02"]:
+            response = self.client.post(
+                "/api/time-off",
+                json={"date": request_date, "hours": 4, "type": "U", "reason": f"reason-{request_date}"},
+                headers=member_headers
+            )
+            self.assertEqual(response.status_code, 200, response.text)
+
+        response = self.client.get("/api/time-off", headers=self.admin_headers())
+        self.assertEqual(response.status_code, 200, response.text)
+        dates = [item["date"] for item in response.json()]
+        self.assertEqual(dates[:3], ["2026-04-03", "2026-04-02", "2026-04-01"])
+
+    def test_admin_overtime_list_is_sorted_by_request_date_desc(self):
+        self.create_member("member_a")
+        member_headers = {"Authorization": f"Bearer {self.login('member_a', 'member123')}"}
+
+        for request_date in ["2026-04-01", "2026-04-03", "2026-04-02"]:
+            response = self.client.post(
+                "/api/overtime",
+                json={"date": request_date, "hours": 2, "reason": f"reason-{request_date}"},
+                headers=member_headers
+            )
+            self.assertEqual(response.status_code, 200, response.text)
+
+        response = self.client.get("/api/overtime", headers=self.admin_headers())
+        self.assertEqual(response.status_code, 200, response.text)
+        dates = [item["date"] for item in response.json()]
+        self.assertEqual(dates[:3], ["2026-04-03", "2026-04-02", "2026-04-01"])
+
 
 if __name__ == "__main__":
     unittest.main()

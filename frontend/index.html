@@ -787,6 +787,7 @@
                     <!-- 调休申请 -->
                     <div v-show="currentPage === 'timeoff'">
                         <el-button type="primary" @click="showTimeoffDialog=true">➕ 申请调休</el-button>
+                        <div style="margin-top:10px;color:#7b8799;font-size:12px">默认按申请日期倒序显示</div>
                         <div class="table-wrapper desktop-only" style="margin-top:15px">
                             <el-table :data="timeoffList" stripe>
                                 <el-table-column prop="date" label="日期" width="100"></el-table-column>
@@ -868,6 +869,7 @@
                     <!-- 加班记录 -->
                     <div v-show="currentPage === 'overtime'">
                         <el-button type="primary" @click="showOvertimeDialog=true">➕ 登记加班</el-button>
+                        <div style="margin-top:10px;color:#7b8799;font-size:12px">默认按申请日期倒序显示</div>
                         
                         <!-- 加班热力图 -->
                         <div class="heatmap-panel">
@@ -1362,7 +1364,7 @@
     </div>
     
     <!-- 版本号 -->
-    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V4.2</a>
+    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V4.3</a>
     
     <script src="./api.js"></script>
     <script src="./session.js"></script>

@@ -105,46 +105,82 @@ def send_webhook(config: dict, title: str, content: str, link_url: str = "") -> 
         push_link_url=link_url or None
     )
 
-def notify_time_off_request(user_name: str, date: str, hours: float, reason: str, webhook_config: dict) -> bool:
+def build_webhook_content(summary: str, lines: list[tuple[str, Optional[str]]], footer: Optional[str] = None) -> str:
+    parts = [summary]
+    for label, value in lines:
+        if value in [None, "", "None"]:
+            continue
+        parts.append(f"{label}：{value}")
+    if footer:
+        parts.extend(["", footer])
+    return "\n".join(parts)
+
+def notify_time_off_request(user_name: str, date: str, hours: float, reason: str, webhook_config: dict, link_url: str = "") -> bool:
     """调休申请通知"""
     if not webhook_config.get("enabled") or not webhook_config.get("notify_time_off"):
         return False
     
-    title = "🏖️ 调休申请"
-    content = f"{user_name} 申请调休\n日期：{date}\n时长：{hours}小时\n事由：{reason}"
+    title = "调休申请 | 待审批"
+    content = build_webhook_content(
+        summary=f"{user_name} 申请调休",
+        lines=[
+            ("日期", date),
+            ("时长", f"{hours} 小时"),
+            ("事由", reason)
+        ]
+    )
     
-    return send_webhook(webhook_config, title, content)
+    return send_webhook(webhook_config, title, content, link_url)
 
-def notify_overtime_request(user_name: str, date: str, hours: float, reason: str, webhook_config: dict) -> bool:
+def notify_overtime_request(user_name: str, date: str, hours: float, reason: str, webhook_config: dict, link_url: str = "") -> bool:
     """加班记录通知"""
     if not webhook_config.get("enabled") or not webhook_config.get("notify_overtime"):
         return False
     
-    title = "⏰ 加班记录"
-    content = f"{user_name} 登记加班\n日期：{date}\n时长：{hours}小时\n事由：{reason}"
+    title = "加班记录 | 待确认"
+    content = build_webhook_content(
+        summary=f"{user_name} 登记加班",
+        lines=[
+            ("日期", date),
+            ("时长", f"{hours} 小时"),
+            ("事由", reason)
+        ]
+    )
     
-    return send_webhook(webhook_config, title, content)
+    return send_webhook(webhook_config, title, content, link_url)
 
-def notify_time_off_approved(user_name: str, date: str, hours: float, approved: bool, webhook_config: dict, admin_comment: Optional[str] = None) -> bool:
+def notify_time_off_approved(user_name: str, date: str, hours: float, approved: bool, webhook_config: dict, admin_comment: Optional[str] = None, link_url: str = "") -> bool:
     """调休审批通知"""
     if not webhook_config.get("enabled") or not webhook_config.get("notify_time_off_approved"):
         return False
     
-    status = "✅ 已批准" if approved else "❌ 已拒绝"
-    title = "🏖️ 调休审批"
-    comment_line = f"\n留言：{admin_comment}" if admin_comment else ""
-    content = f"{user_name} 的调休申请 {status}\n日期：{date}\n时长：{hours}小时{comment_line}"
+    status = "已批准" if approved else "已拒绝"
+    title = f"调休审批 | {status}"
+    content = build_webhook_content(
+        summary=f"{user_name} 的调休申请 {status}",
+        lines=[
+            ("日期", date),
+            ("时长", f"{hours} 小时"),
+            ("审批意见", admin_comment)
+        ]
+    )
     
-    return send_webhook(webhook_config, title, content)
+    return send_webhook(webhook_config, title, content, link_url)
 
-def notify_overtime_approved(user_name: str, date: str, hours: float, approved: bool, webhook_config: dict, admin_comment: Optional[str] = None) -> bool:
+def notify_overtime_approved(user_name: str, date: str, hours: float, approved: bool, webhook_config: dict, admin_comment: Optional[str] = None, link_url: str = "") -> bool:
     """加班确认通知"""
     if not webhook_config.get("enabled") or not webhook_config.get("notify_overtime_approved"):
         return False
     
-    status = "✅ 已确认" if approved else "❌ 已拒绝"
-    title = "⏰ 加班确认"
-    comment_line = f"\n留言：{admin_comment}" if admin_comment else ""
-    content = f"{user_name} 的加班记录 {status}\n日期：{date}\n时长：{hours}小时{comment_line}"
+    status = "已确认" if approved else "已拒绝"
+    title = f"加班确认 | {status}"
+    content = build_webhook_content(
+        summary=f"{user_name} 的加班记录 {status}",
+        lines=[
+            ("日期", date),
+            ("时长", f"{hours} 小时"),
+            ("审批意见", admin_comment)
+        ]
+    )
     
-    return send_webhook(webhook_config, title, content)
+    return send_webhook(webhook_config, title, content, link_url)
