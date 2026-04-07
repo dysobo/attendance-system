@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 from typing import Optional, List, Literal
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from jose import JWTError, jwt
 import database
 import webhook as webhook_utils
@@ -41,7 +41,7 @@ def verify_password(plain_password, hashed_password):
 
 security = HTTPBearer()
 
-app = FastAPI(title="考勤管理系统", version="4.3.0")
+app = FastAPI(title="考勤管理系统", version="4.4.0")
 
 # CORS 配置
 app.add_middleware(
@@ -111,6 +111,21 @@ class OvertimeRecordApprove(BaseModel):
 
 # ==================== 工具函数 ====================
 
+TIME_OFF_TYPE_NAMES = {
+    "U": "调休",
+    "B": "病假",
+    "S": "事假",
+    "H": "婚假",
+    "C": "产假",
+    "L": "护理假",
+    "J": "经期假",
+    "Y": "孕期假",
+    "R": "哺乳假",
+    "N": "年休假",
+    "T": "探亲假",
+    "Z": "丧假"
+}
+
 def create_access_token(data: dict):
     to_encode = data.copy()
     if 'sub' in to_encode:
@@ -144,6 +159,115 @@ def build_textcard_content(summary: str, lines: List[tuple[str, Optional[str]]],
     if footer:
         content_parts.append(f'<div class="gray">{footer}</div>')
     return "".join(content_parts)
+
+def validate_half_hour_value(hours: float) -> float:
+    try:
+        normalized = float(hours)
+    except (TypeError, ValueError):
+        raise ValueError("时长格式不正确，请使用 0.5 小时为步长")
+
+    if normalized <= 0 or round(normalized * 2) != normalized * 2:
+        raise ValueError("时长必须大于 0，且以 0.5 小时为步长")
+    return normalized
+
+def parse_command_date(raw_value: str, today: Optional[date] = None) -> date:
+    value = (raw_value or "").strip()
+    reference_day = today or date.today()
+
+    if value in ["今天", "今日"]:
+        return reference_day
+    if value == "昨天":
+        return reference_day - timedelta(days=1)
+    if value == "前天":
+        return reference_day - timedelta(days=2)
+    if value == "明天":
+        return reference_day + timedelta(days=1)
+    if value == "后天":
+        return reference_day + timedelta(days=2)
+
+    normalized = value.replace("/", "-").replace("年", "-").replace("月", "-").replace("日", "")
+    for date_format in ("%Y-%m-%d", "%m-%d"):
+        try:
+            parsed = datetime.strptime(normalized, date_format).date()
+            if date_format == "%m-%d":
+                return parsed.replace(year=reference_day.year)
+            return parsed
+        except ValueError:
+            continue
+
+    raise ValueError("日期格式不支持，请使用 昨天 / 今天 / 明天 / 后天 / YYYY-MM-DD")
+
+def parse_wechat_command(command_text: str, today: Optional[date] = None) -> dict:
+    text = re.sub(r"\s+", " ", (command_text or "").strip())
+    command_match = re.match(r"^(记加班|加班|调休)(?:申请)?\s*(.*)$", text)
+    if not command_match:
+        raise ValueError("暂不支持该指令")
+
+    command_name = command_match.group(1)
+    body = command_match.group(2).strip()
+    if not body:
+        raise ValueError("缺少时长信息，请使用“记加班 4h 今天 事由”或“调休 1h 今天 事由”")
+
+    hours_match = re.search(r"(?P<hours>\d+(?:\.\d+)?)\s*(?:h|H|小时)", body)
+    if not hours_match:
+        raise ValueError("缺少时长信息，请使用 h 或 小时，例如 4h")
+
+    hours = validate_half_hour_value(float(hours_match.group("hours")))
+    body_without_hours = (body[:hours_match.start()] + " " + body[hours_match.end():]).strip()
+
+    parsed_date = today or date.today()
+    date_token = None
+    for pattern in [
+        r"(前天|昨天|今天|今日|明天|后天)",
+        r"(\d{4}[/-]\d{1,2}[/-]\d{1,2})",
+        r"(\d{1,2}[/-]\d{1,2})",
+        r"(\d{4}年\d{1,2}月\d{1,2}日)",
+        r"(\d{1,2}月\d{1,2}日)"
+    ]:
+        date_match = re.search(pattern, body_without_hours)
+        if date_match:
+            date_token = date_match.group(1)
+            parsed_date = parse_command_date(date_token, today=today)
+            body_without_hours = (body_without_hours[:date_match.start()] + " " + body_without_hours[date_match.end():]).strip()
+            break
+
+    reason = body_without_hours.strip(" ，,；;。")
+    action = "overtime" if command_name in ["记加班", "加班"] else "time_off"
+
+    return {
+        "action": action,
+        "date": parsed_date,
+        "hours": hours,
+        "reason": reason or None,
+        "original_text": text
+    }
+
+def parse_wechat_approval_command(command_text: str) -> dict:
+    text = re.sub(r"\s+", " ", (command_text or "").strip())
+    approval_match = re.match(r"^(同意|不同意|拒绝)(?:\s+(.+))?$", text)
+    if not approval_match:
+        raise ValueError("暂不支持该审批指令")
+
+    command_name = approval_match.group(1)
+    admin_comment = (approval_match.group(2) or "").strip()
+    return {
+        "approved": command_name == "同意",
+        "admin_comment": admin_comment or None,
+        "original_text": text
+    }
+
+def is_supported_wechat_command(command_text: str) -> bool:
+    text = re.sub(r"\s+", " ", (command_text or "").strip())
+    return re.match(r"^(记加班|加班|调休)(?:申请)?(?:\s|$)", text) is not None or re.match(r"^(同意|不同意|拒绝)(?:\s|$)", text) is not None
+
+def build_wechat_command_help_lines(user: Optional[database.User] = None) -> List[tuple[str, Optional[str]]]:
+    lines = [
+        ("加班", "记加班 4h 今天 设备调试"),
+        ("调休", "调休 1h 明天 看牙")
+    ]
+    if user and user.role == "admin":
+        lines.append(("审批", "同意 已处理；不同意 工时不足"))
+    return lines
 
 def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(database.get_db)):
     try:
@@ -183,7 +307,7 @@ def startup():
 
 @app.get("/")
 def root():
-    return {"message": "考勤管理系统 API", "version": "4.3.0"}
+    return {"message": "考勤管理系统 API", "version": "4.4.0"}
 
 # --- 用户认证 ---
 
@@ -588,6 +712,7 @@ async def wechat_callback_post(
         event = msg_root.find('Event')
         event_key = msg_root.find('EventKey')
         from_user = msg_root.find('FromUserName')
+        content_node = msg_root.find('Content')
 
         if msg_type is not None and msg_type.text == 'event':
             if event is not None and event.text == 'CLICK':
@@ -599,6 +724,52 @@ async def wechat_callback_post(
                         handle_push_stats(user_id, db)
                     except Exception as e:
                         print(f'Error calling handler: {e}')
+        elif msg_type is not None and msg_type.text == 'text':
+            wechat_user_id = from_user.text.strip() if from_user is not None and from_user.text else ""
+            command_text = content_node.text.strip() if content_node is not None and content_node.text else ""
+            bound_user = db.query(database.User).filter(database.User.wechat_user_id == wechat_user_id).first() if wechat_user_id else None
+            if command_text and is_supported_wechat_command(command_text):
+                print(f"📝 企业微信文本指令：{wechat_user_id} -> {command_text}")
+                try:
+                    handle_wechat_text_command(wechat_user_id, command_text, db)
+                except ValueError as e:
+                    print(f"⚠️ 企业微信指令处理失败：{e}")
+                    send_wechat_command_feedback(
+                        wechat_user_id=wechat_user_id,
+                        success=False,
+                        summary="指令未处理成功",
+                        lines=[
+                            ("原始内容", command_text),
+                            ("原因", str(e))
+                        ],
+                        footer="请按示例格式发送",
+                        db=db
+                    )
+                except Exception as e:
+                    print(f"❌ 企业微信指令异常：{e}")
+                    send_wechat_command_feedback(
+                        wechat_user_id=wechat_user_id,
+                        success=False,
+                        summary="指令处理时发生异常",
+                        lines=[
+                            ("原始内容", command_text)
+                        ],
+                        footer="请稍后重试，或改用网页端提交",
+                        db=db
+                    )
+            elif command_text:
+                print(f"ℹ️ 未识别文本指令：{wechat_user_id} -> {command_text}")
+                send_wechat_command_feedback(
+                    wechat_user_id=wechat_user_id,
+                    success=False,
+                    summary="未能识别你的指令",
+                    lines=[
+                        ("原始内容", command_text),
+                        *build_wechat_command_help_lines(bound_user)
+                    ],
+                    footer="请按以上格式发送",
+                    db=db
+                )
         return 'success'
     except Exception as e:
         print(f'Error parsing message: {e}')
@@ -630,16 +801,12 @@ def get_wechat_access_token(db: Session) -> str:
         print(f"❌ 获取 access_token 异常：{e}")
         return ""
 
-def send_wechat_message(user_id: int, title: str, content: str, link_url: str = "", db: Session = None):
-    if not db:
+def send_wechat_message_to_wechat_user(wechat_user_id: str, title: str, content: str, link_url: str = "", db: Session = None):
+    if not db or not wechat_user_id:
         return False
 
     config = db.query(database.WechatConfig).filter(database.WechatConfig.enabled == True).first()
     if not config:
-        return False
-
-    user = db.query(database.User).filter(database.User.id == user_id).first()
-    if not user or not user.enable_push or not user.wechat_user_id:
         return False
 
     access_token = get_wechat_access_token(db)
@@ -649,7 +816,7 @@ def send_wechat_message(user_id: int, title: str, content: str, link_url: str = 
     try:
         url = f"{config.api_url}/cgi-bin/message/send?access_token={access_token}"
         payload = {
-            "touser": user.wechat_user_id,
+            "touser": wechat_user_id,
             "msgtype": "textcard",
             "agentid": config.agent_id,
             "textcard": {
@@ -664,7 +831,7 @@ def send_wechat_message(user_id: int, title: str, content: str, link_url: str = 
         result = response.json()
 
         if result.get("errcode") == 0:
-            print(f"✅ 企业微信消息发送成功：{user.name} - {title}")
+            print(f"✅ 企业微信消息发送成功：{wechat_user_id} - {title}")
             return True
         else:
             print(f"❌ 企业微信消息发送失败：{result}")
@@ -672,6 +839,376 @@ def send_wechat_message(user_id: int, title: str, content: str, link_url: str = 
     except Exception as e:
         print(f"❌ 企业微信消息发送异常：{e}")
         return False
+
+def send_wechat_message(user_id: int, title: str, content: str, link_url: str = "", db: Session = None):
+    if not db:
+        return False
+
+    user = db.query(database.User).filter(database.User.id == user_id).first()
+    if not user or not user.enable_push or not user.wechat_user_id:
+        return False
+
+    return send_wechat_message_to_wechat_user(user.wechat_user_id, title, content, link_url, db)
+
+def create_time_off_request_for_user(
+    user: database.User,
+    request_date: date,
+    hours: float,
+    reason: Optional[str],
+    db: Session,
+    request_type: str = "U"
+):
+    request = database.TimeOffRequest(
+        user_id=user.id,
+        date=request_date,
+        hours=hours,
+        type=request_type,
+        reason=reason
+    )
+    db.add(request)
+    db.commit()
+    db.refresh(request)
+
+    type_name = TIME_OFF_TYPE_NAMES.get(request_type, "调休")
+    link_url = "https://x.dysobo.cn/kq/?page=timeoff"
+    title = build_textcard_title(f"{type_name}申请", "待审批")
+    content = build_textcard_content(
+        summary=f"{user.name} 提交了{type_name}申请",
+        lines=[
+            ("日期", str(request.date)),
+            ("时长", f"{request.hours} 小时"),
+            ("事由", request.reason)
+        ],
+        footer="请及时审批处理"
+    )
+    admins = db.query(database.User).filter(database.User.role == "admin").all()
+    for admin in admins:
+        send_wechat_message(admin.id, title, content, link_url, db)
+
+    webhook_config = webhook_utils.load_webhook_config()
+    if webhook_config.get("enabled") and webhook_config.get("notify_time_off"):
+        webhook_utils.notify_time_off_request(
+            user_name=user.name,
+            date=str(request.date),
+            hours=request.hours,
+            reason=request.reason or "",
+            webhook_config=webhook_config,
+            link_url=f"https://x.dysobo.cn/kq/?page=timeoff&id={request.id}"
+        )
+
+    return request
+
+def create_overtime_record_for_user(
+    user: database.User,
+    record_date: date,
+    hours: float,
+    reason: Optional[str],
+    db: Session
+):
+    record = database.OvertimeRecord(
+        user_id=user.id,
+        date=record_date,
+        hours=hours,
+        reason=reason
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+
+    link_url = "https://x.dysobo.cn/kq/?page=overtime"
+    title = build_textcard_title("加班记录", "待确认")
+    content = build_textcard_content(
+        summary=f"{user.name} 提交了加班申请",
+        lines=[
+            ("日期", str(record.date)),
+            ("时长", f"{record.hours} 小时"),
+            ("事由", record.reason)
+        ],
+        footer="请及时确认处理"
+    )
+    admins = db.query(database.User).filter(database.User.role == "admin").all()
+    for admin in admins:
+        send_wechat_message(admin.id, title, content, link_url, db)
+
+    webhook_config = webhook_utils.load_webhook_config()
+    if webhook_config.get("enabled") and webhook_config.get("notify_overtime"):
+        webhook_utils.notify_overtime_request(
+            user_name=user.name,
+            date=str(record.date),
+            hours=record.hours,
+            reason=record.reason or "",
+            webhook_config=webhook_config,
+            link_url=f"https://x.dysobo.cn/kq/?page=overtime&id={record.id}"
+        )
+
+    return record
+
+def approve_time_off_request_record(
+    request: database.TimeOffRequest,
+    approver: database.User,
+    approved: bool,
+    admin_comment: Optional[str],
+    db: Session
+):
+    request.status = "approved" if approved else "rejected"
+    request.approved_by = approver.id
+    request.admin_comment = admin_comment
+    request.updated_at = datetime.now()
+    db.commit()
+
+    type_name = TIME_OFF_TYPE_NAMES.get(request.type, "调休")
+    status_text = "已批准" if approved else "已拒绝"
+    link_url = "https://x.dysobo.cn/kq/?page=timeoff"
+    applicant = db.query(database.User).filter(database.User.id == request.user_id).first()
+    applicant_name = applicant.name if applicant else "未知"
+
+    title = build_textcard_title(f"{type_name}申请", status_text)
+    content = build_textcard_content(
+        summary=f"您的{type_name}申请{status_text}",
+        lines=[
+            ("日期", str(request.date)),
+            ("时长", f"{request.hours} 小时"),
+            ("审批意见", admin_comment)
+        ],
+        footer="点击查看详情"
+    )
+    send_wechat_message(request.user_id, title, content, link_url, db)
+
+    admin_title = build_textcard_title(f"{type_name}审批", "已处理")
+    admin_content = build_textcard_content(
+        summary=f"你已{status_text} {applicant_name} 的{type_name}申请",
+        lines=[
+            ("日期", str(request.date)),
+            ("时长", f"{request.hours} 小时"),
+            ("审批意见", admin_comment)
+        ],
+        footer="点击查看详情"
+    )
+    send_wechat_message(approver.id, admin_title, admin_content, link_url, db)
+
+    webhook_config = webhook_utils.load_webhook_config()
+    webhook_utils.notify_time_off_approved(
+        user_name=applicant_name,
+        date=str(request.date),
+        hours=request.hours,
+        approved=approved,
+        webhook_config=webhook_config,
+        admin_comment=admin_comment,
+        link_url=link_url
+    )
+
+    return {
+        "record_type": "time_off",
+        "status_text": status_text,
+        "type_name": type_name,
+        "applicant_name": applicant_name,
+        "date": request.date,
+        "hours": request.hours
+    }
+
+def approve_overtime_record_entry(
+    record: database.OvertimeRecord,
+    approver: database.User,
+    approved: bool,
+    admin_comment: Optional[str],
+    db: Session
+):
+    record.status = "approved" if approved else "rejected"
+    record.approved_by = approver.id
+    record.admin_comment = admin_comment
+    db.commit()
+
+    status_text = "已确认" if approved else "已拒绝"
+    link_url = "https://x.dysobo.cn/kq/?page=overtime"
+    applicant = db.query(database.User).filter(database.User.id == record.user_id).first()
+    applicant_name = applicant.name if applicant else "未知"
+
+    title = build_textcard_title("加班记录", status_text)
+    content = build_textcard_content(
+        summary=f"您的加班申请{status_text}",
+        lines=[
+            ("日期", str(record.date)),
+            ("时长", f"{record.hours} 小时"),
+            ("审批意见", admin_comment)
+        ],
+        footer="点击查看详情"
+    )
+    send_wechat_message(record.user_id, title, content, link_url, db)
+
+    admin_title = build_textcard_title("加班确认", "已处理")
+    admin_content = build_textcard_content(
+        summary=f"你已{status_text} {applicant_name} 的加班申请",
+        lines=[
+            ("日期", str(record.date)),
+            ("时长", f"{record.hours} 小时"),
+            ("审批意见", admin_comment)
+        ],
+        footer="点击查看详情"
+    )
+    send_wechat_message(approver.id, admin_title, admin_content, link_url, db)
+
+    webhook_config = webhook_utils.load_webhook_config()
+    webhook_utils.notify_overtime_approved(
+        user_name=applicant_name,
+        date=str(record.date),
+        hours=record.hours,
+        approved=approved,
+        webhook_config=webhook_config,
+        admin_comment=admin_comment,
+        link_url=link_url
+    )
+
+    return {
+        "record_type": "overtime",
+        "status_text": status_text,
+        "type_name": "加班",
+        "applicant_name": applicant_name,
+        "date": record.date,
+        "hours": record.hours
+    }
+
+def get_latest_pending_approval_target(db: Session):
+    latest_time_off = db.query(database.TimeOffRequest).filter(
+        database.TimeOffRequest.status == "pending"
+    ).order_by(
+        database.TimeOffRequest.created_at.desc(),
+        database.TimeOffRequest.id.desc()
+    ).first()
+
+    latest_overtime = db.query(database.OvertimeRecord).filter(
+        database.OvertimeRecord.status == "pending"
+    ).order_by(
+        database.OvertimeRecord.created_at.desc(),
+        database.OvertimeRecord.id.desc()
+    ).first()
+
+    candidates = []
+    if latest_time_off:
+        candidates.append(("time_off", latest_time_off, latest_time_off.created_at or datetime.min, latest_time_off.id))
+    if latest_overtime:
+        candidates.append(("overtime", latest_overtime, latest_overtime.created_at or datetime.min, latest_overtime.id))
+
+    if not candidates:
+        return None, None
+
+    candidates.sort(key=lambda item: (item[2], item[3]), reverse=True)
+    return candidates[0][0], candidates[0][1]
+
+def send_wechat_command_feedback(
+    wechat_user_id: str,
+    success: bool,
+    summary: str,
+    lines: Optional[List[tuple[str, Optional[str]]]],
+    db: Session,
+    footer: Optional[str] = None,
+    link_url: str = "https://x.dysobo.cn/kq/"
+):
+    if not wechat_user_id:
+        return False
+
+    title = build_textcard_title("微信指令", "已受理" if success else "处理失败")
+    content = build_textcard_content(summary=summary, lines=lines or [], footer=footer)
+    return send_wechat_message_to_wechat_user(wechat_user_id, title, content, link_url, db)
+
+def handle_wechat_text_command(wechat_user_id: str, command_text: str, db: Session):
+    user = db.query(database.User).filter(database.User.wechat_user_id == wechat_user_id).first()
+    if not user:
+        raise ValueError("未找到已绑定当前企业微信的系统用户，请先在系统中完成绑定")
+
+    if re.match(r"^(同意|不同意|拒绝)(?:\s|$)", re.sub(r"\s+", " ", (command_text or "").strip())):
+        if user.role != "admin":
+            raise ValueError("只有管理员可以使用快捷审批，请按加班或调休格式发送申请")
+
+        approval_command = parse_wechat_approval_command(command_text)
+        target_type, target_record = get_latest_pending_approval_target(db)
+        if not target_record:
+            raise ValueError("当前没有待审批的加班或调休申请")
+
+        if target_type == "time_off":
+            approval_result = approve_time_off_request_record(
+                request=target_record,
+                approver=user,
+                approved=approval_command["approved"],
+                admin_comment=approval_command["admin_comment"],
+                db=db
+            )
+            link_url = "https://x.dysobo.cn/kq/?page=timeoff"
+        else:
+            approval_result = approve_overtime_record_entry(
+                record=target_record,
+                approver=user,
+                approved=approval_command["approved"],
+                admin_comment=approval_command["admin_comment"],
+                db=db
+            )
+            link_url = "https://x.dysobo.cn/kq/?page=overtime"
+
+        send_wechat_command_feedback(
+            wechat_user_id=wechat_user_id,
+            success=True,
+            summary=f"已处理最近一条待审批{approval_result['type_name']}申请",
+            lines=[
+                ("申请人", approval_result["applicant_name"]),
+                ("日期", str(approval_result["date"])),
+                ("时长", f"{approval_result['hours']} 小时"),
+                ("处理结果", approval_result["status_text"]),
+                ("审批意见", approval_command["admin_comment"])
+            ],
+            footer="审批指令格式：同意 已处理；不同意 工时不足",
+            link_url=link_url,
+            db=db
+        )
+        return {"action": "approval", "target_type": target_type}
+
+    parsed_command = parse_wechat_command(command_text)
+    if parsed_command["action"] == "overtime":
+        record = create_overtime_record_for_user(
+            user=user,
+            record_date=parsed_command["date"],
+            hours=parsed_command["hours"],
+            reason=parsed_command["reason"],
+            db=db
+        )
+        send_wechat_command_feedback(
+            wechat_user_id=wechat_user_id,
+            success=True,
+            summary="已为你创建加班申请",
+            lines=[
+                ("日期", str(record.date)),
+                ("时长", f"{record.hours} 小时"),
+                ("事由", record.reason),
+                ("状态", "待确认")
+            ],
+            footer="可继续发送“记加班 2h 今天 设备调试”快速登记",
+            link_url="https://x.dysobo.cn/kq/?page=overtime",
+            db=db
+        )
+        return {"action": "overtime", "id": record.id}
+
+    request = create_time_off_request_for_user(
+        user=user,
+        request_date=parsed_command["date"],
+        hours=parsed_command["hours"],
+        reason=parsed_command["reason"],
+        request_type="U",
+        db=db
+    )
+    send_wechat_command_feedback(
+        wechat_user_id=wechat_user_id,
+        success=True,
+        summary="已为你创建调休申请",
+        lines=[
+            ("日期", str(request.date)),
+            ("时长", f"{request.hours} 小时"),
+            ("类型", TIME_OFF_TYPE_NAMES.get(request.type, "调休")),
+            ("事由", request.reason),
+            ("状态", "待审批")
+        ],
+        footer="可继续发送“调休 1h 今天 外出办事”快速申请",
+        link_url="https://x.dysobo.cn/kq/?page=timeoff",
+        db=db
+    )
+    return {"action": "time_off", "id": request.id}
 
 
 def build_shift_notification(title: str, date_value, shift_type: str, note: Optional[str] = None, highlight_text: Optional[str] = None):
@@ -865,48 +1402,14 @@ def list_time_off(user_id: Optional[int] = None, status: Optional[str] = None, c
 
 @app.post("/api/time-off")
 def create_time_off(request_data: TimeOffRequestCreate, current_user: database.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
-    request = database.TimeOffRequest(
-        user_id=current_user.id,
-        date=request_data.date,
+    request = create_time_off_request_for_user(
+        user=current_user,
+        request_date=request_data.date,
         hours=request_data.hours,
-        type=request_data.type,
-        reason=request_data.reason
+        reason=request_data.reason,
+        request_type=request_data.type,
+        db=db
     )
-    db.add(request)
-    db.commit()
-    db.refresh(request)
-    
-    # 发送企业微信推送给所有管理员
-    type_names = {"U":"调休","B":"病假","S":"事假","H":"婚假","C":"产假","L":"护理假","J":"经期假","Y":"孕期假","R":"哺乳假","N":"年休假","T":"探亲假","Z":"丧假"}
-    type_name = type_names.get(request_data.type, "调休")
-    link_url = f"https://x.dysobo.cn/kq/?page=timeoff"
-    title = build_textcard_title(f"{type_name}申请", "待审批")
-    content = build_textcard_content(
-        summary=f"{current_user.name} 提交了{type_name}申请",
-        lines=[
-            ("日期", str(request_data.date)),
-            ("时长", f"{request_data.hours} 小时"),
-            ("事由", request_data.reason)
-        ],
-        footer="请及时审批处理"
-    )
-    admins = db.query(database.User).filter(database.User.role == "admin").all()
-    for admin in admins:
-        send_wechat_message(admin.id, title, content, link_url, db)
-    
-    # 发送 Webhook 通知
-    webhook_config = webhook_utils.load_webhook_config()
-    if webhook_config.get("enabled") and webhook_config.get("notify_time_off"):
-        link_url = f"https://x.dysobo.cn/kq/?page=timeoff&id={request.id}"
-        webhook_utils.notify_time_off_request(
-            user_name=current_user.name,
-            date=str(request_data.date),
-            hours=request_data.hours,
-            reason=request_data.reason or "",
-            webhook_config=webhook_config,
-            link_url=link_url
-        )
-    
     return {"id": request.id, "message": "调休申请已提交"}
 
 @app.post("/api/time-off/{request_id}/approve")
@@ -917,53 +1420,13 @@ def approve_time_off(request_id: int, approve_data: TimeOffRequestApprove, curre
     request = db.query(database.TimeOffRequest).filter(database.TimeOffRequest.id == request_id).first()
     if not request:
         raise HTTPException(status_code=404, detail="申请不存在")
-    
-    request.status = "approved" if approve_data.approved else "rejected"
-    request.approved_by = current_user.id
-    request.admin_comment = approve_data.admin_comment
-    request.updated_at = datetime.now()
-    db.commit()
-    
-    type_names = {"U":"调休","B":"病假","S":"事假","H":"婚假","C":"产假","L":"护理假","J":"经期假","Y":"孕期假","R":"哺乳假","N":"年休假","T":"探亲假","Z":"丧假"}
-    type_name = type_names.get(request.type, "调休")
-    status_text = "已批准" if approve_data.approved else "已拒绝"
-    title = build_textcard_title(f"{type_name}申请", status_text)
-    content = build_textcard_content(
-        summary=f"您的{type_name}申请{status_text}",
-        lines=[
-            ("日期", str(request.date)),
-            ("时长", f"{request.hours} 小时"),
-            ("审批意见", approve_data.admin_comment)
-        ],
-        footer="点击查看详情"
-    )
-    link_url = f"https://x.dysobo.cn/kq/?page=timeoff"
-    send_wechat_message(request.user_id, title, content, link_url, db)
 
-    # 推送给管理员自己确认
-    applicant = db.query(database.User).filter(database.User.id == request.user_id).first()
-    applicant_name = applicant.name if applicant else "未知"
-    admin_title = build_textcard_title(f"{type_name}审批", "已处理")
-    admin_content = build_textcard_content(
-        summary=f"你已{status_text} {applicant_name} 的{type_name}申请",
-        lines=[
-            ("日期", str(request.date)),
-            ("时长", f"{request.hours} 小时"),
-            ("审批意见", approve_data.admin_comment)
-        ],
-        footer="点击查看详情"
-    )
-    send_wechat_message(current_user.id, admin_title, admin_content, link_url, db)
-
-    webhook_config = webhook_utils.load_webhook_config()
-    webhook_utils.notify_time_off_approved(
-        user_name=applicant_name,
-        date=str(request.date),
-        hours=request.hours,
+    approve_time_off_request_record(
+        request=request,
+        approver=current_user,
         approved=approve_data.approved,
-        webhook_config=webhook_config,
         admin_comment=approve_data.admin_comment,
-        link_url=link_url
+        db=db
     )
 
     return {"message": "申请已" + ("批准" if approve_data.approved else "拒绝")}
@@ -1067,45 +1530,13 @@ def test_webhook(webhook_test: dict, current_user: database.User = Depends(get_c
 
 @app.post("/api/overtime")
 def create_overtime(record_data: OvertimeRecordCreate, current_user: database.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
-    record = database.OvertimeRecord(
-        user_id=current_user.id,
-        date=record_data.date,
+    record = create_overtime_record_for_user(
+        user=current_user,
+        record_date=record_data.date,
         hours=record_data.hours,
-        reason=record_data.reason
+        reason=record_data.reason,
+        db=db
     )
-    db.add(record)
-    db.commit()
-    db.refresh(record)
-    
-    # 发送企业微信推送给所有管理员
-    link_url = f"https://x.dysobo.cn/kq/?page=overtime"
-    title = build_textcard_title("加班记录", "待确认")
-    content = build_textcard_content(
-        summary=f"{current_user.name} 提交了加班申请",
-        lines=[
-            ("日期", str(record_data.date)),
-            ("时长", f"{record_data.hours} 小时"),
-            ("事由", record_data.reason)
-        ],
-        footer="请及时确认处理"
-    )
-    admins = db.query(database.User).filter(database.User.role == "admin").all()
-    for admin in admins:
-        send_wechat_message(admin.id, title, content, link_url, db)
-    
-    # 发送 Webhook 通知
-    webhook_config = webhook_utils.load_webhook_config()
-    if webhook_config.get("enabled") and webhook_config.get("notify_overtime"):
-        link_url = f"https://x.dysobo.cn/kq/?page=overtime&id={record.id}"
-        webhook_utils.notify_overtime_request(
-            user_name=current_user.name,
-            date=str(record_data.date),
-            hours=record_data.hours,
-            reason=record_data.reason or "",
-            webhook_config=webhook_config,
-            link_url=link_url
-        )
-    
     return {"id": record.id, "message": "加班记录已提交"}
 
 @app.post("/api/overtime/{record_id}/approve")
@@ -1116,50 +1547,13 @@ def approve_overtime(record_id: int, approve_data: OvertimeRecordApprove, curren
     record = db.query(database.OvertimeRecord).filter(database.OvertimeRecord.id == record_id).first()
     if not record:
         raise HTTPException(status_code=404, detail="记录不存在")
-    
-    record.status = "approved" if approve_data.approved else "rejected"
-    record.approved_by = current_user.id
-    record.admin_comment = approve_data.admin_comment
-    db.commit()
-    
-    status_text = "已确认" if approve_data.approved else "已拒绝"
-    title = build_textcard_title("加班记录", status_text)
-    content = build_textcard_content(
-        summary=f"您的加班申请{status_text}",
-        lines=[
-            ("日期", str(record.date)),
-            ("时长", f"{record.hours} 小时"),
-            ("审批意见", approve_data.admin_comment)
-        ],
-        footer="点击查看详情"
-    )
-    link_url = f"https://x.dysobo.cn/kq/?page=overtime"
-    send_wechat_message(record.user_id, title, content, link_url, db)
 
-    # 推送给管理员自己确认
-    applicant = db.query(database.User).filter(database.User.id == record.user_id).first()
-    applicant_name = applicant.name if applicant else "未知"
-    admin_title = build_textcard_title("加班确认", "已处理")
-    admin_content = build_textcard_content(
-        summary=f"你已{status_text} {applicant_name} 的加班申请",
-        lines=[
-            ("日期", str(record.date)),
-            ("时长", f"{record.hours} 小时"),
-            ("审批意见", approve_data.admin_comment)
-        ],
-        footer="点击查看详情"
-    )
-    send_wechat_message(current_user.id, admin_title, admin_content, link_url, db)
-
-    webhook_config = webhook_utils.load_webhook_config()
-    webhook_utils.notify_overtime_approved(
-        user_name=applicant_name,
-        date=str(record.date),
-        hours=record.hours,
+    approve_overtime_record_entry(
+        record=record,
+        approver=current_user,
         approved=approve_data.approved,
-        webhook_config=webhook_config,
         admin_comment=approve_data.admin_comment,
-        link_url=link_url
+        db=db
     )
 
     return {"message": "加班记录已" + ("批准" if approve_data.approved else "拒绝")}

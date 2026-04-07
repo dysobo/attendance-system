@@ -166,6 +166,74 @@ class APISecurityTests(unittest.TestCase):
         dates = [item["date"] for item in response.json()]
         self.assertEqual(dates[:3], ["2026-04-03", "2026-04-02", "2026-04-01"])
 
+    def test_parse_wechat_command_supports_relative_date_and_reason(self):
+        parsed = main.parse_wechat_command("记加班 4h 今天 设备调试", today=main.date(2026, 4, 7))
+        self.assertEqual(parsed["action"], "overtime")
+        self.assertEqual(str(parsed["date"]), "2026-04-07")
+        self.assertEqual(parsed["hours"], 4.0)
+        self.assertEqual(parsed["reason"], "设备调试")
+
+    def test_parse_wechat_command_supports_yesterday(self):
+        parsed = main.parse_wechat_command("记加班 4h 昨天 设备调试", today=main.date(2026, 4, 7))
+        self.assertEqual(parsed["action"], "overtime")
+        self.assertEqual(str(parsed["date"]), "2026-04-06")
+        self.assertEqual(parsed["hours"], 4.0)
+        self.assertEqual(parsed["reason"], "设备调试")
+
+    def test_parse_wechat_approval_command_supports_reason(self):
+        parsed = main.parse_wechat_approval_command("不同意 工时不足")
+        self.assertFalse(parsed["approved"])
+        self.assertEqual(parsed["admin_comment"], "工时不足")
+
+    def test_handle_wechat_text_command_creates_time_off_for_bound_user(self):
+        member_id = self.create_member("member_a")
+        with database.SessionLocal() as db:
+            user = db.query(database.User).filter(database.User.id == member_id).first()
+            user.wechat_user_id = "wx-member-a"
+            db.commit()
+
+            result = main.handle_wechat_text_command("wx-member-a", "调休 1h 2026-04-07 看牙", db)
+            self.assertEqual(result["action"], "time_off")
+
+            requests = db.query(database.TimeOffRequest).filter(database.TimeOffRequest.user_id == member_id).all()
+            self.assertEqual(len(requests), 1)
+            self.assertEqual(str(requests[0].date), "2026-04-07")
+            self.assertEqual(requests[0].hours, 1.0)
+            self.assertEqual(requests[0].reason, "看牙")
+            self.assertEqual(requests[0].status, "pending")
+
+    def test_handle_wechat_text_command_requires_bound_user(self):
+        with database.SessionLocal() as db:
+            with self.assertRaises(ValueError):
+                main.handle_wechat_text_command("missing-user", "记加班 2h 今天 值班", db)
+
+    def test_admin_wechat_approval_command_approves_latest_pending_request(self):
+        member_id = self.create_member("member_a")
+        with database.SessionLocal() as db:
+            member = db.query(database.User).filter(database.User.id == member_id).first()
+            admin = db.query(database.User).filter(database.User.name == "admin").first()
+            admin.wechat_user_id = "wx-admin"
+            member.wechat_user_id = "wx-member-a"
+
+            request = database.TimeOffRequest(
+                user_id=member_id,
+                date=main.date(2026, 4, 7),
+                hours=2.0,
+                type="U",
+                reason="看牙"
+            )
+            db.add(request)
+            db.commit()
+
+            result = main.handle_wechat_text_command("wx-admin", "同意 已处理", db)
+            self.assertEqual(result["action"], "approval")
+            self.assertEqual(result["target_type"], "time_off")
+
+            db.refresh(request)
+            self.assertEqual(request.status, "approved")
+            self.assertEqual(request.admin_comment, "已处理")
+            self.assertEqual(request.approved_by, admin.id)
+
 
 if __name__ == "__main__":
     unittest.main()
