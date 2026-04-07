@@ -1,11 +1,13 @@
 import os
 import tempfile
 import unittest
+import io
 
 try:
     from fastapi.testclient import TestClient
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
+    from openpyxl import load_workbook
 
     import database
     import main
@@ -14,12 +16,13 @@ except ModuleNotFoundError:
     TestClient = None
     create_engine = None
     sessionmaker = None
+    load_workbook = None
     database = None
     main = None
     webhook_utils = None
 
 
-@unittest.skipUnless(TestClient is not None, "FastAPI 测试依赖未安装")
+@unittest.skipUnless(TestClient is not None and load_workbook is not None, "FastAPI 或 openpyxl 测试依赖未安装")
 class APISecurityTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -233,6 +236,27 @@ class APISecurityTests(unittest.TestCase):
             self.assertEqual(request.status, "approved")
             self.assertEqual(request.admin_comment, "已处理")
             self.assertEqual(request.approved_by, admin.id)
+
+    def test_monthly_export_generates_three_sheets_with_selected_order(self):
+        member_a_id = self.create_member("member_a")
+        member_b_id = self.create_member("member_b")
+
+        response = self.client.post(
+            "/api/export/monthly",
+            json={"year": 2026, "month": 4, "user_ids": [member_b_id, member_a_id]},
+            headers=self.admin_headers()
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertIn("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", response.headers["content-type"])
+
+        workbook = load_workbook(io.BytesIO(response.content))
+        self.assertEqual(workbook.sheetnames, ["原始记录", "考勤统计", "数据统计"])
+        self.assertEqual(workbook["原始记录"]["A2"].value, "member_b")
+        self.assertEqual(workbook["原始记录"]["A3"].value, "member_a")
+        self.assertEqual(workbook["考勤统计"]["A4"].value, 1)
+        self.assertEqual(workbook["考勤统计"]["B4"].value, "member_b")
+        self.assertEqual(workbook["考勤统计"]["A5"].value, 2)
+        self.assertEqual(workbook["数据统计"]["B4"].value, "member_b")
 
 
 if __name__ == "__main__":

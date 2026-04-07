@@ -1,10 +1,10 @@
 from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import PlainTextResponse, Response
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
-from typing import Optional, List, Literal
+from typing import Optional, List, Literal, Union
 from datetime import datetime, date, timedelta
 from jose import JWTError, jwt
 import database
@@ -14,11 +14,13 @@ import hashlib
 import requests
 import json
 import io
-import csv
 import re
 import time
 import xml.etree.ElementTree as ET
 from hashlib import sha1
+from collections import defaultdict
+import calendar
+from urllib.parse import quote
 
 # ==================== 配置 ====================
 
@@ -41,7 +43,7 @@ def verify_password(plain_password, hashed_password):
 
 security = HTTPBearer()
 
-app = FastAPI(title="考勤管理系统", version="4.4.0")
+app = FastAPI(title="考勤管理系统", version="5.0.0")
 
 # CORS 配置
 app.add_middleware(
@@ -108,6 +110,11 @@ class OvertimeRecordCreate(BaseModel):
 class OvertimeRecordApprove(BaseModel):
     approved: bool
     admin_comment: Optional[str] = None
+
+class MonthlyExportRequest(BaseModel):
+    month: Optional[int] = None
+    year: Optional[int] = None
+    user_ids: List[int] = Field(default_factory=list)
 
 # ==================== 工具函数 ====================
 
@@ -307,7 +314,7 @@ def startup():
 
 @app.get("/")
 def root():
-    return {"message": "考勤管理系统 API", "version": "4.4.0"}
+    return {"message": "考勤管理系统 API", "version": "5.0.0"}
 
 # --- 用户认证 ---
 
@@ -1679,72 +1686,383 @@ def get_my_summary(current_user: database.User = Depends(get_current_user), db: 
 
 # ==================== 数据导出与备份 ====================
 
+def normalize_export_hour(value: float) -> Union[float, int]:
+    normalized = round(float(value or 0), 1)
+    return int(normalized) if normalized.is_integer() else normalized
+
+def get_export_month_bounds(year: int, month: int) -> tuple[date, date]:
+    if month < 1 or month > 12:
+        raise HTTPException(status_code=400, detail="月份必须在 1-12 之间")
+    month_start = date(year, month, 1)
+    month_end = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
+    return month_start, month_end
+
+def count_month_workdays(month_start: date, month_end: date) -> int:
+    workdays = 0
+    cursor = month_start
+    while cursor < month_end:
+        if cursor.weekday() < 5:
+            workdays += 1
+        cursor += timedelta(days=1)
+    return workdays
+
+def autosize_worksheet_columns(worksheet):
+    from openpyxl.utils import get_column_letter
+
+    for column_index, column_cells in enumerate(worksheet.iter_cols(min_col=1, max_col=worksheet.max_column, min_row=1, max_row=worksheet.max_row), start=1):
+        max_length = 0
+        column_letter = get_column_letter(column_index)
+        for cell in column_cells:
+            if cell.value is None:
+                continue
+            max_length = max(max_length, len(str(cell.value)))
+        worksheet.column_dimensions[column_letter].width = min(max(max_length + 2, 10), 24)
+
+def resolve_monthly_export_users(db: Session, user_ids: List[int]) -> List[database.User]:
+    members = db.query(database.User).filter(database.User.role == "member").order_by(database.User.id).all()
+    member_map = {user.id: user for user in members}
+
+    if not user_ids:
+        if not members:
+            raise HTTPException(status_code=400, detail="当前没有可导出的组员")
+        return members
+
+    resolved_users = []
+    seen_ids = set()
+    for raw_user_id in user_ids:
+        try:
+            user_id = int(raw_user_id)
+        except (TypeError, ValueError):
+            continue
+        if user_id in member_map and user_id not in seen_ids:
+            resolved_users.append(member_map[user_id])
+            seen_ids.add(user_id)
+
+    if not resolved_users:
+        raise HTTPException(status_code=400, detail="请选择至少一名组员用于导出")
+
+    return resolved_users
+
+def build_monthly_export_workbook(year: int, month: int, ordered_user_ids: List[int], db: Session):
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    except ModuleNotFoundError:
+        raise HTTPException(status_code=500, detail="缺少 openpyxl 依赖，请先安装后再导出")
+
+    users = resolve_monthly_export_users(db, ordered_user_ids)
+    month_start, month_end = get_export_month_bounds(year, month)
+    _, days_in_month = calendar.monthrange(year, month)
+    workday_hours = count_month_workdays(month_start, month_end) * 8
+    user_ids = [user.id for user in users]
+
+    time_off_records = db.query(database.TimeOffRequest).filter(
+        database.TimeOffRequest.user_id.in_(user_ids),
+        database.TimeOffRequest.date >= month_start,
+        database.TimeOffRequest.date < month_end
+    ).order_by(
+        database.TimeOffRequest.user_id,
+        database.TimeOffRequest.date,
+        database.TimeOffRequest.id
+    ).all()
+
+    overtime_records = db.query(database.OvertimeRecord).filter(
+        database.OvertimeRecord.user_id.in_(user_ids),
+        database.OvertimeRecord.date >= month_start,
+        database.OvertimeRecord.date < month_end
+    ).order_by(
+        database.OvertimeRecord.user_id,
+        database.OvertimeRecord.date,
+        database.OvertimeRecord.id
+    ).all()
+
+    time_off_by_user = defaultdict(list)
+    approved_time_off_by_user = defaultdict(list)
+    for record in time_off_records:
+        time_off_by_user[record.user_id].append(record)
+        if record.status == "approved":
+            approved_time_off_by_user[record.user_id].append(record)
+
+    overtime_by_user = defaultdict(list)
+    approved_overtime_by_user = defaultdict(list)
+    for record in overtime_records:
+        overtime_by_user[record.user_id].append(record)
+        if record.status == "approved":
+            approved_overtime_by_user[record.user_id].append(record)
+
+    approved_time_off_hours_by_user_day = defaultdict(float)
+    approved_overtime_hours_by_user_day = defaultdict(float)
+    for record in time_off_records:
+        if record.status == "approved":
+            approved_time_off_hours_by_user_day[(record.user_id, record.date)] += float(record.hours or 0)
+    for record in overtime_records:
+        if record.status == "approved":
+            approved_overtime_hours_by_user_day[(record.user_id, record.date)] += float(record.hours or 0)
+
+    workbook = Workbook()
+    worksheet_raw = workbook.active
+    worksheet_raw.title = "原始记录"
+    worksheet_stats = workbook.create_sheet("考勤统计")
+    worksheet_summary = workbook.create_sheet("数据统计")
+
+    header_fill = PatternFill("solid", fgColor="D9EAF7")
+    title_fill = PatternFill("solid", fgColor="EAF3FF")
+    thin_side = Side(style="thin", color="D6DCE5")
+    thin_border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
+    center_alignment = Alignment(horizontal="center", vertical="center")
+    left_alignment = Alignment(horizontal="left", vertical="center")
+
+    # Sheet1: 原始记录，保持旧导出结构
+    raw_header = ["姓名"] + [f"{day}日" for day in range(1, days_in_month + 1)]
+    worksheet_raw.append(raw_header)
+    for cell in worksheet_raw[1]:
+        cell.font = Font(bold=True)
+        cell.fill = header_fill
+        cell.border = thin_border
+        cell.alignment = center_alignment
+
+    for user in users:
+        daily_data = defaultdict(list)
+        for record in time_off_by_user.get(user.id, []):
+            daily_data[record.date.day].append(f"{record.type or 'U'}{normalize_export_hour(record.hours)}")
+        for record in overtime_by_user.get(user.id, []):
+            daily_data[record.date.day].append(f"▲{normalize_export_hour(record.hours)}")
+
+        row = [user.name]
+        for day in range(1, days_in_month + 1):
+            row.append(" ".join(daily_data.get(day, [])))
+        worksheet_raw.append(row)
+
+    for row in worksheet_raw.iter_rows():
+        for cell in row:
+            cell.border = thin_border
+            cell.alignment = center_alignment if cell.column != 1 else left_alignment
+    worksheet_raw.freeze_panes = "B2"
+
+    # Sheet2: 考勤统计
+    stats_title = f"产品试验室{year}年{month}月考勤统计"
+    worksheet_stats.merge_cells("A1:W1")
+    worksheet_stats["A1"] = stats_title
+    worksheet_stats["A1"].font = Font(bold=True, size=14)
+    worksheet_stats["A1"].alignment = center_alignment
+    worksheet_stats["A1"].fill = title_fill
+    worksheet_stats["A1"].border = thin_border
+
+    stats_headers = [
+        "人员编号", "姓名", "组别", "应出勤（h）", "实出勤（h）", "迟到早退（次）",
+        "事假（h）", "病假（h）", "工伤假（h）", "婚假（h）", "产护理假（h）",
+        "经期假（h）", "孕假（h）", "哺乳假（h）", "探亲假（h）", "年休假（h）",
+        "旷工（h）", "丧假（h）", "加班（h）", "调休（h）", "外出公干（h）",
+        "其他", "签字确认"
+    ]
+    worksheet_stats.append([])
+    worksheet_stats.append(stats_headers)
+    for cell in worksheet_stats[3]:
+        cell.font = Font(bold=True)
+        cell.fill = header_fill
+        cell.border = thin_border
+        cell.alignment = center_alignment
+
+    for index, user in enumerate(users, start=1):
+        time_off_totals = {
+            "S": 0.0,
+            "B": 0.0,
+            "H": 0.0,
+            "C_L": 0.0,
+            "J": 0.0,
+            "Y": 0.0,
+            "R": 0.0,
+            "T": 0.0,
+            "N": 0.0,
+            "Z": 0.0,
+            "U": 0.0
+        }
+        overtime_hours = 0.0
+
+        for record in approved_time_off_by_user.get(user.id, []):
+            if record.type == "U":
+                time_off_totals["U"] += float(record.hours or 0)
+            elif record.type == "B":
+                time_off_totals["B"] += float(record.hours or 0)
+            elif record.type == "S":
+                time_off_totals["S"] += float(record.hours or 0)
+            elif record.type == "H":
+                time_off_totals["H"] += float(record.hours or 0)
+            elif record.type in ["C", "L"]:
+                time_off_totals["C_L"] += float(record.hours or 0)
+            elif record.type == "J":
+                time_off_totals["J"] += float(record.hours or 0)
+            elif record.type == "Y":
+                time_off_totals["Y"] += float(record.hours or 0)
+            elif record.type == "R":
+                time_off_totals["R"] += float(record.hours or 0)
+            elif record.type == "T":
+                time_off_totals["T"] += float(record.hours or 0)
+            elif record.type == "N":
+                time_off_totals["N"] += float(record.hours or 0)
+            elif record.type == "Z":
+                time_off_totals["Z"] += float(record.hours or 0)
+
+        for record in approved_overtime_by_user.get(user.id, []):
+            overtime_hours += float(record.hours or 0)
+
+        row_index = index + 3
+        worksheet_stats.append([
+            index,
+            user.name,
+            "试验",
+            normalize_export_hour(workday_hours),
+            None,
+            0,
+            normalize_export_hour(time_off_totals["S"]),
+            normalize_export_hour(time_off_totals["B"]),
+            0,
+            normalize_export_hour(time_off_totals["H"]),
+            normalize_export_hour(time_off_totals["C_L"]),
+            normalize_export_hour(time_off_totals["J"]),
+            normalize_export_hour(time_off_totals["Y"]),
+            normalize_export_hour(time_off_totals["R"]),
+            normalize_export_hour(time_off_totals["T"]),
+            normalize_export_hour(time_off_totals["N"]),
+            0,
+            normalize_export_hour(time_off_totals["Z"]),
+            normalize_export_hour(overtime_hours),
+            normalize_export_hour(time_off_totals["U"]),
+            0,
+            0,
+            ""
+        ])
+
+        worksheet_stats[f"E{row_index}"] = f"=D{row_index}-SUM(G{row_index}:R{row_index})+S{row_index}-T{row_index}-U{row_index}-V{row_index}"
+
+    for row in worksheet_stats.iter_rows(min_row=3, max_row=worksheet_stats.max_row, min_col=1, max_col=23):
+        for cell in row:
+            cell.border = thin_border
+            cell.alignment = center_alignment
+
+    for row_index in range(4, worksheet_stats.max_row + 1):
+        for column_letter in ["D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V"]:
+            cell = worksheet_stats[f"{column_letter}{row_index}"]
+            cell.number_format = "General"
+            if cell.value == 0:
+                cell.font = Font(color="FFFFFF")
+
+    export_time_row = worksheet_stats.max_row + 2
+    worksheet_stats.merge_cells(start_row=export_time_row, start_column=22, end_row=export_time_row, end_column=23)
+    worksheet_stats.cell(row=export_time_row, column=22).value = f"填写时间：{datetime.now().year}年{datetime.now().month}月{datetime.now().day}日"
+    worksheet_stats.cell(row=export_time_row, column=22).alignment = Alignment(horizontal="right", vertical="center")
+    worksheet_stats.cell(row=export_time_row, column=22).font = Font(italic=True)
+
+    # Sheet3: 数据统计
+    summary_title = f"产品试验室{year}年{month}月数据统计"
+    worksheet_summary.merge_cells("A1:H1")
+    worksheet_summary["A1"] = summary_title
+    worksheet_summary["A1"].font = Font(bold=True, size=14)
+    worksheet_summary["A1"].alignment = center_alignment
+    worksheet_summary["A1"].fill = title_fill
+    worksheet_summary["A1"].border = thin_border
+    worksheet_summary.append([])
+    worksheet_summary.append(["人员编号", "姓名", "正餐合计", "大夜班", "小夜班", "交通费（天）", "调休（h）", "加班（h）"])
+
+    for cell in worksheet_summary[3]:
+        cell.font = Font(bold=True)
+        cell.fill = header_fill
+        cell.border = thin_border
+        cell.alignment = center_alignment
+
+    for index, user in enumerate(users, start=1):
+        stats_row = index + 3
+        meal_count = 0
+        large_night_count = 0
+        small_night_count = 0
+        transport_days = 0
+
+        current_day = month_start
+        while current_day < month_end:
+            leave_hours = approved_time_off_hours_by_user_day[(user.id, current_day)]
+            overtime_hours = approved_overtime_hours_by_user_day[(user.id, current_day)]
+            is_workday = current_day.weekday() < 5
+
+            if is_workday:
+                if leave_hours < 8:
+                    meal_count += 1
+                    transport_days += 1
+                if overtime_hours > 1:
+                    meal_count += 1
+                if overtime_hours >= 9:
+                    large_night_count += 1
+                if overtime_hours >= 5:
+                    small_night_count += 1
+            else:
+                if overtime_hours > 0:
+                    meal_count += 1
+                    transport_days += 1
+                    if overtime_hours > 9:
+                        meal_count += 1
+                if overtime_hours >= 16:
+                    large_night_count += 1
+                if overtime_hours >= 12:
+                    small_night_count += 1
+
+            current_day += timedelta(days=1)
+
+        worksheet_summary.append([
+            index,
+            user.name,
+            meal_count,
+            large_night_count,
+            small_night_count,
+            transport_days,
+            f"='考勤统计'!T{stats_row}",
+            f"='考勤统计'!S{stats_row}"
+        ])
+
+    for row in worksheet_summary.iter_rows(min_row=3, max_row=worksheet_summary.max_row, min_col=1, max_col=8):
+        for cell in row:
+            cell.border = thin_border
+            cell.alignment = center_alignment
+
+    autosize_worksheet_columns(worksheet_raw)
+    autosize_worksheet_columns(worksheet_stats)
+    autosize_worksheet_columns(worksheet_summary)
+
+    output = io.BytesIO()
+    workbook.save(output)
+    output.seek(0)
+    return output.getvalue(), f"考勤统计_{year}年{month}月.xlsx"
+
 @app.get("/api/export/monthly")
 def export_monthly_stats(month: Optional[int] = None, year: Optional[int] = None, current_user: database.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="需要管理员权限")
-    
-    import calendar
+
     if not month or not year:
         today = date.today()
         month = today.month
         year = today.year
-    
-    month_start = date(year, month, 1)
-    _, days_in_month = calendar.monthrange(year, month)
-    
-    users = db.query(database.User).filter(database.User.role == "member").all()
-    
-    output = io.StringIO()
-    writer = csv.writer(output)
-    
-    header = ['姓名'] + [f'{d}日' for d in range(1, days_in_month + 1)]
-    writer.writerow(header)
-    
-    for user in users:
-        row = [user.name]
-        
-        time_off_records = db.query(database.TimeOffRequest).filter(
-            database.TimeOffRequest.user_id == user.id,
-            database.TimeOffRequest.date >= month_start,
-            database.TimeOffRequest.date < date(year, month + 1, 1) if month < 12 else date(year + 1, 1, 1)
-        ).all()
-        
-        overtime_records = db.query(database.OvertimeRecord).filter(
-            database.OvertimeRecord.user_id == user.id,
-            database.OvertimeRecord.date >= month_start,
-            database.OvertimeRecord.date < date(year, month + 1, 1) if month < 12 else date(year + 1, 1, 1)
-        ).all()
-        
-        daily_data = {}
-        
-        for t in time_off_records:
-            day = t.date.day
-            if day not in daily_data:
-                daily_data[day] = []
-            type_symbol = t.type if t.type else 'U'
-            daily_data[day].append(f"{type_symbol}{t.hours}")
-        
-        for o in overtime_records:
-            day = o.date.day
-            if day not in daily_data:
-                daily_data[day] = []
-            daily_data[day].append(f"▲{o.hours}")
-        
-        for day in range(1, days_in_month + 1):
-            if day in daily_data:
-                row.append(' '.join(daily_data[day]))
-            else:
-                row.append('')
-        
-        writer.writerow(row)
-    
-    csv_content = output.getvalue()
-    
-    return {
-        "filename": f"考勤统计_{year}年{month}月.csv",
-        "data": csv_content
-    }
+
+    file_bytes, filename = build_monthly_export_workbook(year, month, [], db)
+    encoded_filename = quote(filename)
+    return Response(
+        content=file_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"}
+    )
+
+@app.post("/api/export/monthly")
+def export_monthly_stats_with_order(export_request: MonthlyExportRequest, current_user: database.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+
+    month = export_request.month or date.today().month
+    year = export_request.year or date.today().year
+    file_bytes, filename = build_monthly_export_workbook(year, month, export_request.user_ids, db)
+    encoded_filename = quote(filename)
+    return Response(
+        content=file_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"}
+    )
 
 @app.get("/api/backup/export")
 def export_backup(include_sensitive: bool = False, current_user: database.User = Depends(get_current_user), db: Session = Depends(database.get_db)):

@@ -1,11 +1,23 @@
-function createAttendanceDataTools({ api, exportMonth, exportYear, passwordForm, loadData }) {
+function createAttendanceDataTools({ api, exportMonth, exportYear, exportSelectedUserIds, passwordForm, loadData }) {
     async function exportMonthlyStats() {
         try {
             const token = localStorage.getItem('token');
-            const response = await fetch(`/kq/api/export/monthly?month=${exportMonth.value}&year=${exportYear.value}`, {
+            const selectedIds = exportSelectedUserIds.value || [];
+            if (!selectedIds.length) {
+                throw new Error('请至少勾选一名组员');
+            }
+
+            const response = await fetch('/kq/api/export/monthly', {
+                method: 'POST',
                 headers: {
-                    Authorization: `Bearer ${token}`
-                }
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    month: exportMonth.value,
+                    year: exportYear.value,
+                    user_ids: selectedIds
+                })
             });
 
             const contentType = response.headers.get('content-type');
@@ -14,16 +26,21 @@ function createAttendanceDataTools({ api, exportMonth, exportYear, passwordForm,
             }
 
             if (!response.ok) {
-                const err = await response.json().catch(() => ({ detail: '导出失败' }));
+                const err = contentType && contentType.includes('application/json')
+                    ? await response.json().catch(() => ({ detail: '导出失败' }))
+                    : { detail: '导出失败' };
                 throw new Error(err.detail || '导出失败');
             }
 
-            const result = await response.json();
-            const blob = new Blob([result.data], { type: 'text/csv;charset=utf-8;' });
+            const blob = await response.blob();
+            const disposition = response.headers.get('content-disposition') || '';
+            const match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+            const filename = match ? decodeURIComponent(match[1]) : `考勤统计_${exportYear.value}年${exportMonth.value}月.xlsx`;
             const link = document.createElement('a');
             link.href = URL.createObjectURL(blob);
-            link.download = result.filename || `考勤统计_${exportYear.value}年${exportMonth.value}月.csv`;
+            link.download = filename;
             link.click();
+            URL.revokeObjectURL(link.href);
             alert('✅ 导出成功');
         } catch (e) {
             alert(`❌ 导出失败：${e.message}`);

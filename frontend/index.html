@@ -1158,9 +1158,9 @@
                     <div v-show="currentPage === 'export' && currentUser.role==='admin'">
                         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px">
                             <!-- 当月统计导出 -->
-                            <div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 2px 12px rgba(0,0,0,0.1)">
+                            <div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 2px 12px rgba(0,0,0,0.1);grid-column:1 / -1">
                                 <h3 style="margin-bottom:15px;color:#667eea">📊 当月统计导出</h3>
-                                <p style="color:#666;font-size:13px;margin-bottom:15px">导出当月调休、加班、出勤率统计报表（CSV 格式）</p>
+                                <p style="color:#666;font-size:13px;margin-bottom:15px">导出 Excel 月报，包含原始记录、考勤统计、数据统计 3 个工作表</p>
                                 <div style="display:flex;gap:10px;margin-bottom:15px">
                                     <el-select v-model="exportMonth" placeholder="月份" style="width:100px">
                                         <el-option v-for="m in 12" :key="m" :label="m+'月'" :value="m"></el-option>
@@ -1169,7 +1169,44 @@
                                         <el-option v-for="y in [2025,2026,2027,2028]" :key="y" :label="y" :value="y"></el-option>
                                     </el-select>
                                 </div>
-                                <el-button type="primary" @click="exportMonthlyStats" style="width:100%">📥 导出 CSV</el-button>
+                                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-bottom:16px">
+                                    <div style="border:1px solid #e5edf8;border-radius:12px;padding:16px;background:#f8fbff">
+                                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+                                            <strong style="color:#30435e">导出人员</strong>
+                                            <div style="display:flex;gap:8px">
+                                                <el-button size="small" @click="selectAllExportUsers">全选</el-button>
+                                                <el-button size="small" @click="clearExportUsers">清空</el-button>
+                                            </div>
+                                        </div>
+                                        <el-checkbox-group v-model="selectedExportUserIds" style="display:flex;flex-direction:column;gap:8px;max-height:280px;overflow:auto;padding-right:4px">
+                                            <el-checkbox v-for="user in exportCandidates" :key="user.id" :label="user.id">
+                                                {{ user.name }}
+                                            </el-checkbox>
+                                        </el-checkbox-group>
+                                    </div>
+                                    <div style="border:1px solid #e5edf8;border-radius:12px;padding:16px;background:#fdfefe">
+                                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+                                            <strong style="color:#30435e">导出顺序</strong>
+                                            <span style="font-size:12px;color:#73839a">按此顺序生成人员编号</span>
+                                        </div>
+                                        <div v-if="selectedExportUsers.length" style="display:flex;flex-direction:column;gap:8px;max-height:280px;overflow:auto;padding-right:4px">
+                                            <div v-for="(user,index) in selectedExportUsers" :key="user.id" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border:1px solid #e6edf5;border-radius:10px;background:#fff">
+                                                <div style="display:flex;align-items:center;gap:10px">
+                                                    <span style="display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:24px;border-radius:999px;background:#e9f2ff;color:#3366cc;font-size:12px;font-weight:700">{{ index + 1 }}</span>
+                                                    <span style="color:#24364d">{{ user.name }}</span>
+                                                </div>
+                                                <div style="display:flex;gap:6px">
+                                                    <el-button size="small" @click="moveExportUser(user.id, -1)" :disabled="index===0">上移</el-button>
+                                                    <el-button size="small" @click="moveExportUser(user.id, 1)" :disabled="index===selectedExportUsers.length-1">下移</el-button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div v-else style="padding:16px;border:1px dashed #d7e1ec;border-radius:10px;color:#8a97a8;font-size:13px;text-align:center">
+                                            请至少勾选一名组员用于导出
+                                        </div>
+                                    </div>
+                                </div>
+                                <el-button type="primary" @click="exportMonthlyStats" style="width:100%">📥 导出 Excel</el-button>
                             </div>
                             
                             <!-- 数据备份 -->
@@ -1186,7 +1223,8 @@
                         <div style="margin-top:20px;background:#fff;border-radius:12px;padding:20px;box-shadow:0 2px 12px rgba(0,0,0,0.1)">
                             <h4 style="margin-bottom:10px;color:#333">📖 使用说明</h4>
                             <ul style="color:#666;font-size:13px;line-height:2">
-                                <li><strong>当月统计导出：</strong>生成 CSV 格式的月度报表，包含调休汇总、加班汇总、出勤率统计</li>
+                                <li><strong>当月统计导出：</strong>生成 Excel 格式月报，包含原始记录、考勤统计、数据统计 3 个工作表</li>
+                                <li><strong>人员顺序：</strong>先勾选导出人员，再用上移/下移调整顺序，导出后按该顺序生成人员编号</li>
                                 <li><strong>数据备份：</strong>导出所有数据为 JSON 文件，建议定期备份</li>
                                 <li><strong>数据恢复：</strong>从备份文件恢复数据，<strong style="color:red">注意：会清空现有数据！</strong></li>
                             </ul>
@@ -1364,7 +1402,7 @@
     </div>
     
     <!-- 版本号 -->
-    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V4.4</a>
+    <a href="https://github.com/dysobo/attendance-system" target="_blank" class="version-tag" title="查看 GitHub 项目">V5.0</a>
     
     <script src="./api.js"></script>
     <script src="./session.js"></script>
